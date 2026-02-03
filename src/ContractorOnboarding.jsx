@@ -1230,7 +1230,7 @@ Welcome to the team!
         <header className="admin-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <button className="admin-back-btn" onClick={() => setView('login')}>← Back</button>
-            <h1 className="admin-title">Onboarding Admin</h1>
+            <h1 className="admin-title">Onboarding Admin v2.0</h1>
           </div>
           <button className="admin-back-btn" onClick={loadAllContractors}>↻ Refresh</button>
         </header>
