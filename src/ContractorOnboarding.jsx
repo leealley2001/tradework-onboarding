@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { jsPDF } from 'jspdf';
+//import { jsPDF } from 'jspdf';
 
 // Use the same Supabase instance as main site
 const supabase = createClient(
