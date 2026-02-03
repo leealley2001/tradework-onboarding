@@ -94,71 +94,252 @@ const generateContractorAgreementPDF = (contractor, formData, signature) => {
 const generateW9PDF = (contractor, formData, signature) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
-  let y = 20;
+  const leftMargin = 15;
+  const rightMargin = pageWidth - 15;
+  let y = 12;
 
-  // Header
-  doc.setFontSize(20);
+  // Form header box (similar to IRS style)
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.5);
+  doc.rect(leftMargin, y, 25, 18);
+  doc.setFontSize(22);
   doc.setFont('helvetica', 'bold');
-  doc.text('TRADE WORK TODAY', pageWidth / 2, y, { align: 'center' });
-  y += 8;
-  doc.setFontSize(16);
-  doc.text('W-9 TAX INFORMATION', pageWidth / 2, y, { align: 'center' });
-  y += 15;
-
-  doc.setFontSize(10);
+  doc.text('W-9', leftMargin + 12.5, y + 12, { align: 'center' });
+  
+  // Form title
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text('Request for Taxpayer Identification Number and Certification', pageWidth / 2, y, { align: 'center' });
-  y += 15;
+  doc.text('(Rev. October 2018)', leftMargin + 12.5, y + 17, { align: 'center' });
+  doc.text('Department of the Treasury', 45, y + 4);
+  doc.text('Internal Revenue Service', 45, y + 8);
+  
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Request for Taxpayer', 95, y + 5);
+  doc.text('Identification Number and Certification', 95, y + 11);
+  
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Give Form to the', rightMargin - 30, y + 4);
+  doc.text('requester. Do not', rightMargin - 30, y + 8);
+  doc.text('send to the IRS.', rightMargin - 30, y + 12);
+  
+  y += 22;
+  doc.setLineWidth(1);
+  doc.line(leftMargin, y, rightMargin, y);
+  y += 5;
 
-  // Tax info
-  const fields = [
-    { label: 'Legal Name', value: formData.w9_name || contractor.name },
-    { label: 'Business Name', value: formData.w9_business || 'N/A' },
-    { label: 'Tax Classification', value: formData.w9_classification || 'Not specified' },
-    { label: 'Address', value: formData.w9_address || 'Not provided' },
-    { label: 'City, State, ZIP', value: `${formData.w9_city || ''}, ${formData.w9_state || ''} ${formData.w9_zip || ''}` },
-    { label: 'SSN/EIN', value: '***-**-' + (formData.w9_ssn ? formData.w9_ssn.slice(-4) : '****') + ' (on file)' }
+  // Line 1 - Name
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('1', leftMargin + 2, y + 3);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Name (as shown on your income tax return). Name is required on this line; do not leave this line blank.', leftMargin + 8, y + 3);
+  y += 5;
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text(formData.w9_name || contractor.name, leftMargin + 5, y + 5);
+  y += 8;
+  doc.setLineWidth(0.3);
+  doc.line(leftMargin, y, rightMargin, y);
+  y += 3;
+
+  // Line 2 - Business Name
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('2', leftMargin + 2, y + 3);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Business name/disregarded entity name, if different from above', leftMargin + 8, y + 3);
+  y += 5;
+  if (formData.w9_business) {
+    doc.setFontSize(11);
+    doc.text(formData.w9_business, leftMargin + 5, y + 4);
+  }
+  y += 7;
+  doc.line(leftMargin, y, rightMargin, y);
+  y += 3;
+
+  // Line 3 - Tax Classification
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('3', leftMargin + 2, y + 3);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Check appropriate box for federal tax classification of the person whose name is entered on line 1:', leftMargin + 8, y + 3);
+  y += 6;
+
+  // Classification checkboxes
+  const classifications = [
+    { code: 'individual', label: 'Individual/sole proprietor or single-member LLC', x: leftMargin + 5 },
+    { code: 'c_corp', label: 'C Corporation', x: leftMargin + 85 },
+    { code: 's_corp', label: 'S Corporation', x: leftMargin + 115 },
+    { code: 'partnership', label: 'Partnership', x: leftMargin + 145 }
   ];
 
-  doc.setFontSize(11);
-  fields.forEach(field => {
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${field.label}:`, 20, y);
-    doc.setFont('helvetica', 'normal');
-    doc.text(field.value, 70, y);
-    y += 8;
+  classifications.forEach(c => {
+    doc.rect(c.x, y - 2.5, 3, 3);
+    if (formData.w9_classification === c.code || 
+        (formData.w9_classification === 'llc_single' && c.code === 'individual')) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('X', c.x + 0.5, y + 0.5);
+      doc.setFont('helvetica', 'normal');
+    }
+    doc.text(c.label, c.x + 5, y);
   });
+  y += 6;
 
-  y += 10;
+  // LLC options
+  doc.rect(leftMargin + 5, y - 2.5, 3, 3);
+  if (formData.w9_classification?.startsWith('llc_')) {
+    doc.setFont('helvetica', 'bold');
+    doc.text('X', leftMargin + 5.5, y + 0.5);
+    doc.setFont('helvetica', 'normal');
+  }
+  doc.text('Limited liability company. Enter the tax classification (C=C corporation, S=S corporation, P=Partnership)', leftMargin + 10, y);
+  y += 5;
 
-  // Certification
+  doc.rect(leftMargin + 5, y - 2.5, 3, 3);
+  doc.text('Trust/estate', leftMargin + 10, y);
+  doc.rect(leftMargin + 45, y - 2.5, 3, 3);
+  doc.text('Other (see instructions)', leftMargin + 50, y);
+  y += 5;
+  doc.line(leftMargin, y, rightMargin, y);
+  y += 3;
+
+  // Line 5 & 6 - Address
+  doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
-  doc.text('CERTIFICATION', 20, y);
-  y += 8;
+  doc.text('5', leftMargin + 2, y + 3);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  const certText = 'Under penalties of perjury, I certify that: (1) The number shown on this form is my correct taxpayer identification number, (2) I am not subject to backup withholding, (3) I am a U.S. citizen or other U.S. person, and (4) I am exempt from FATCA reporting.';
-  const certLines = doc.splitTextToSize(certText, 170);
-  doc.text(certLines, 20, y);
-  y += certLines.length * 5 + 15;
-
-  // Signature
-  doc.line(20, y, 190, y);
-  y += 15;
-
-  doc.setFont('helvetica', 'bold');
+  doc.text('Address (number, street, and apt. or suite no.) See instructions.', leftMargin + 8, y + 3);
+  y += 5;
   doc.setFontSize(11);
-  doc.text('ELECTRONIC SIGNATURE', 20, y);
+  doc.text(formData.w9_address || '', leftMargin + 5, y + 4);
+  y += 7;
+  doc.line(leftMargin, y, rightMargin, y);
+  y += 3;
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('6', leftMargin + 2, y + 3);
+  doc.setFont('helvetica', 'normal');
+  doc.text('City, state, and ZIP code', leftMargin + 8, y + 3);
+  y += 5;
+  doc.setFontSize(11);
+  const cityStateZip = `${formData.w9_city || ''}, ${formData.w9_state || ''} ${formData.w9_zip || ''}`;
+  doc.text(cityStateZip.trim() !== ',' ? cityStateZip : '', leftMargin + 5, y + 4);
+  y += 7;
+  doc.line(leftMargin, y, rightMargin, y);
+  y += 5;
+
+  // Part I - TIN
+  doc.setFillColor(200, 200, 200);
+  doc.rect(leftMargin, y, rightMargin - leftMargin, 7, 'F');
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Part I', leftMargin + 3, y + 5);
+  doc.text('Taxpayer Identification Number (TIN)', leftMargin + 25, y + 5);
   y += 10;
 
-  doc.setFont('times', 'italic');
-  doc.setFontSize(18);
-  doc.text(signature.signature, 20, y);
-  y += 8;
-
+  doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
+  doc.text('Enter your TIN in the appropriate box. The TIN provided must match the name given on line 1 to avoid', leftMargin, y);
+  y += 4;
+  doc.text('backup withholding.', leftMargin, y);
+  y += 6;
+
+  // SSN Box
+  doc.setFont('helvetica', 'bold');
+  doc.text('Social security number', leftMargin + 100, y);
+  y += 5;
+  
+  // Draw SSN boxes
+  const ssnBoxX = leftMargin + 100;
+  for (let i = 0; i < 9; i++) {
+    doc.rect(ssnBoxX + (i * 8) + (i >= 3 ? 3 : 0) + (i >= 5 ? 3 : 0), y, 7, 8);
+  }
+  
+  // Fill in masked SSN (show last 4 only)
+  if (formData.w9_ssn) {
+    const lastFour = formData.w9_ssn.slice(-4);
+    doc.setFontSize(12);
+    // Show X's for first 5 digits
+    for (let i = 0; i < 5; i++) {
+      doc.text('X', ssnBoxX + (i * 8) + (i >= 3 ? 3 : 0) + 2, y + 6);
+    }
+    // Show last 4 digits
+    for (let i = 0; i < 4; i++) {
+      doc.text(lastFour[i], ssnBoxX + ((5 + i) * 8) + 6 + 2, y + 6);
+    }
+  }
+  y += 12;
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.text('or', leftMargin + 95, y);
+  y += 5;
+  
+  doc.text('Employer identification number', leftMargin + 100, y);
+  y += 10;
+
+  // Part II - Certification
+  doc.setFillColor(200, 200, 200);
+  doc.rect(leftMargin, y, rightMargin - leftMargin, 7, 'F');
   doc.setFontSize(10);
-  doc.text(`Electronically signed on: ${new Date(signature.signed_at).toLocaleString()}`, 20, y);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Part II', leftMargin + 3, y + 5);
+  doc.text('Certification', leftMargin + 25, y + 5);
+  y += 10;
+
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  const certText = 'Under penalties of perjury, I certify that:\n\n' +
+    '1. The number shown on this form is my correct taxpayer identification number (or I am waiting for a number to be issued to me); and\n\n' +
+    '2. I am not subject to backup withholding because: (a) I am exempt from backup withholding, or (b) I have not been notified by the Internal Revenue Service (IRS) that I am subject to backup withholding as a result of a failure to report all interest or dividends, or (c) the IRS has notified me that I am no longer subject to backup withholding; and\n\n' +
+    '3. I am a U.S. citizen or other U.S. person (defined below); and\n\n' +
+    '4. The FATCA code(s) entered on this form (if any) indicating that I am exempt from FATCA reporting is correct.';
+  
+  const certLines = doc.splitTextToSize(certText, rightMargin - leftMargin - 5);
+  doc.text(certLines, leftMargin, y);
+  y += certLines.length * 3.5 + 5;
+
+  // Signature section
+  doc.setLineWidth(1);
+  doc.line(leftMargin, y, rightMargin, y);
+  y += 5;
+
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Sign', leftMargin + 2, y + 8);
+  doc.text('Here', leftMargin + 2, y + 13);
+  
+  doc.setFont('helvetica', 'normal');
+  doc.text('Signature of', leftMargin + 15, y + 4);
+  doc.text('U.S. person', leftMargin + 15, y + 9);
+  
+  // Signature line
+  doc.line(leftMargin + 40, y + 12, leftMargin + 120, y + 12);
+  doc.setFont('times', 'italic');
+  doc.setFontSize(14);
+  doc.text(signature.signature, leftMargin + 45, y + 10);
+  
+  // Date
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text('Date', leftMargin + 125, y + 4);
+  doc.line(leftMargin + 135, y + 12, rightMargin - 5, y + 12);
+  doc.setFontSize(10);
+  doc.text(new Date(signature.signed_at).toLocaleDateString(), leftMargin + 140, y + 10);
+  
+  y += 20;
+
+  // Footer
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text('ELECTRONIC SIGNATURE NOTICE: This document was electronically signed on ' + new Date(signature.signed_at).toLocaleString(), leftMargin, y);
+  y += 4;
+  doc.text('Electronic signatures have the same legal effect as handwritten signatures under the ESIGN Act and UETA.', leftMargin, y);
+  y += 4;
+  doc.text('Submitted to: TradeWork Today LLC | IP Address: logged', leftMargin, y);
 
   return doc;
 };
@@ -334,6 +515,447 @@ const downloadAllPDFs = (contractor, formData, signatures) => {
     const doc = generateSafetyAgreementPDF(contractor, formData, signatures.safety);
     doc.save(`${contractor.name.replace(/\s+/g, '_')}_Safety_Agreement.pdf`);
   }
+};
+
+// Generate Contractor Handbook PDF (company policies)
+const generateContractorHandbookPDF = () => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 20;
+  let y = 30;
+
+  const addHeader = (pageNum) => {
+    doc.setFillColor(26, 26, 26);
+    doc.rect(0, 0, pageWidth, 20, 'F');
+    doc.setTextColor(251, 191, 36);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('TRADE WORK TODAY - CONTRACTOR HANDBOOK', margin, 13);
+    doc.setTextColor(150, 150, 150);
+    doc.setFontSize(8);
+    doc.text(`Page ${pageNum}`, pageWidth - margin, 13, { align: 'right' });
+    doc.setTextColor(0, 0, 0);
+  };
+
+  const checkNewPage = (needed = 30) => {
+    if (y + needed > pageHeight - 30) {
+      doc.addPage();
+      addHeader(doc.getNumberOfPages());
+      y = 35;
+    }
+  };
+
+  const addSection = (title, content) => {
+    checkNewPage(50);
+    doc.setFillColor(251, 191, 36);
+    doc.rect(margin, y - 5, pageWidth - (margin * 2), 10, 'F');
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(26, 26, 26);
+    doc.text(title, margin + 5, y + 2);
+    doc.setTextColor(0, 0, 0);
+    y += 15;
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    content.forEach(para => {
+      checkNewPage(20);
+      const lines = doc.splitTextToSize(para, pageWidth - (margin * 2));
+      doc.text(lines, margin, y);
+      y += lines.length * 5 + 8;
+    });
+  };
+
+  const addSubSection = (title, content) => {
+    checkNewPage(40);
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, margin, y);
+    y += 8;
+    
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    content.forEach(para => {
+      checkNewPage(15);
+      const lines = doc.splitTextToSize(para, pageWidth - (margin * 2));
+      doc.text(lines, margin, y);
+      y += lines.length * 5 + 5;
+    });
+  };
+
+  // Cover Page
+  doc.setFillColor(26, 26, 26);
+  doc.rect(0, 0, pageWidth, pageHeight, 'F');
+  
+  doc.setFillColor(251, 191, 36);
+  doc.rect(pageWidth/2 - 30, 60, 60, 60, 'F');
+  doc.setFontSize(40);
+  doc.setTextColor(26, 26, 26);
+  doc.text('⚡', pageWidth/2, 100, { align: 'center' });
+  
+  doc.setTextColor(251, 191, 36);
+  doc.setFontSize(32);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TRADE WORK TODAY', pageWidth/2, 150, { align: 'center' });
+  
+  doc.setFontSize(24);
+  doc.setTextColor(255, 255, 255);
+  doc.text('CONTRACTOR', pageWidth/2, 175, { align: 'center' });
+  doc.text('HANDBOOK', pageWidth/2, 190, { align: 'center' });
+  
+  doc.setFontSize(12);
+  doc.setTextColor(150, 150, 150);
+  doc.text('Policies, Procedures & Guidelines', pageWidth/2, 220, { align: 'center' });
+  doc.text('for Independent Contractors', pageWidth/2, 232, { align: 'center' });
+  
+  doc.setFontSize(10);
+  doc.text(`Version 1.0 | ${new Date().toLocaleDateString()}`, pageWidth/2, pageHeight - 30, { align: 'center' });
+
+  // Table of Contents
+  doc.addPage();
+  addHeader(2);
+  y = 40;
+  
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TABLE OF CONTENTS', margin, y);
+  y += 20;
+  
+  const tocItems = [
+    { num: '1', title: 'Welcome & Company Overview', page: 3 },
+    { num: '2', title: 'Independent Contractor Relationship', page: 3 },
+    { num: '3', title: 'Professional Conduct Standards', page: 4 },
+    { num: '4', title: 'Safety Requirements', page: 5 },
+    { num: '5', title: 'Communication Policy', page: 6 },
+    { num: '6', title: 'Attendance & Availability', page: 7 },
+    { num: '7', title: 'Equipment & Tools', page: 7 },
+    { num: '8', title: 'Vehicle & Mileage Policy', page: 8 },
+    { num: '9', title: 'Quality Standards', page: 9 },
+    { num: '10', title: 'Customer Service', page: 9 },
+    { num: '11', title: 'Payment & Invoicing', page: 10 },
+    { num: '12', title: 'Termination', page: 10 }
+  ];
+  
+  doc.setFontSize(11);
+  tocItems.forEach(item => {
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${item.num}.`, margin, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(item.title, margin + 10, y);
+    doc.text(`${item.page}`, pageWidth - margin, y, { align: 'right' });
+    y += 10;
+  });
+
+  // Content Pages
+  doc.addPage();
+  addHeader(3);
+  y = 35;
+
+  addSection('1. WELCOME & COMPANY OVERVIEW', [
+    'Welcome to TradeWork Today! We are a professional handyman and trade services company serving the Phoenix metropolitan area. Our mission is to provide reliable, high-quality services to homeowners and businesses while creating opportunities for skilled tradespeople.',
+    'This handbook outlines the policies, procedures, and expectations for all independent contractors working with TradeWork Today. Please read it carefully and keep it for reference.'
+  ]);
+
+  addSection('2. INDEPENDENT CONTRACTOR RELATIONSHIP', [
+    'As an independent contractor, you are not an employee of TradeWork Today. You maintain control over how you complete your work, set your own schedule (within job requirements), and are responsible for your own taxes, insurance, and business expenses.',
+    'Key points of the independent contractor relationship:',
+    '• You have the right to accept or decline any job assignment',
+    '• You provide your own tools, equipment, and vehicle',
+    '• You are responsible for self-employment taxes',
+    '• You maintain your own liability insurance',
+    '• You may work for other companies simultaneously'
+  ]);
+
+  doc.addPage();
+  addHeader(4);
+  y = 35;
+
+  addSection('3. PROFESSIONAL CONDUCT STANDARDS', [
+    'All contractors represent TradeWork Today when on job sites. Professional conduct is essential to our reputation and success.'
+  ]);
+
+  addSubSection('Appearance Standards', [
+    '• Wear clean, appropriate work clothing',
+    '• Display TradeWork Today identification badge when provided',
+    '• Maintain good personal hygiene',
+    '• No offensive graphics or language on clothing'
+  ]);
+
+  addSubSection('Behavioral Standards', [
+    '• Treat all customers with respect and courtesy',
+    '• No smoking on customer property',
+    '• No alcohol or drugs before or during work',
+    '• No profanity or inappropriate language',
+    '• Keep phone use to job-related matters only',
+    '• Clean up work area before leaving'
+  ]);
+
+  addSubSection('Prohibited Activities', [
+    '• Theft or dishonesty of any kind',
+    '• Harassment or discrimination',
+    '• Unauthorized use of customer property',
+    '• Discussing pricing or soliciting customers directly',
+    '• Taking photos of customer homes without permission'
+  ]);
+
+  doc.addPage();
+  addHeader(5);
+  y = 35;
+
+  addSection('4. SAFETY REQUIREMENTS', [
+    'Safety is our top priority. All contractors must follow OSHA guidelines and TradeWork Today safety policies.'
+  ]);
+
+  addSubSection('Personal Protective Equipment (PPE)', [
+    '• Safety glasses for all cutting, drilling, or overhead work',
+    '• Work gloves when handling materials',
+    '• Steel-toed boots on construction sites',
+    '• Hard hat when required by job conditions',
+    '• Hearing protection when using loud equipment',
+    '• Dust masks for dusty conditions'
+  ]);
+
+  addSubSection('Ladder Safety', [
+    '• Inspect ladder before each use',
+    '• Maintain 3 points of contact at all times',
+    '• Never stand on top two rungs',
+    '• Place on stable, level surface',
+    '• Do not exceed weight capacity',
+    '• Use proper ladder for the height needed'
+  ]);
+
+  addSubSection('Electrical Safety', [
+    '• Always turn off power before electrical work',
+    '• Use a circuit tester to verify power is off',
+    '• Never work on live circuits unless licensed and necessary',
+    '• Keep electrical tools away from water',
+    '• Report any electrical hazards immediately'
+  ]);
+
+  addSubSection('Incident Reporting', [
+    'Report ALL incidents immediately to TradeWork Today, including:',
+    '• Any injury, no matter how minor',
+    '• Property damage',
+    '• Near-miss incidents',
+    '• Safety hazards discovered on site'
+  ]);
+
+  doc.addPage();
+  addHeader(6);
+  y = 35;
+
+  addSection('5. COMMUNICATION POLICY', [
+    'Clear, professional communication is essential for successful job completion and customer satisfaction.'
+  ]);
+
+  addSubSection('Response Times', [
+    '• Respond to dispatch messages within 15 minutes during work hours',
+    '• Confirm job acceptance/decline within 1 hour',
+    '• Notify dispatch immediately of any delays',
+    '• Update job status at key milestones'
+  ]);
+
+  addSubSection('Customer Communication', [
+    '• Introduce yourself professionally upon arrival',
+    '• Explain the work to be done before starting',
+    '• Keep customer informed of progress',
+    '• Discuss any additional issues discovered',
+    '• Review completed work with customer',
+    '• Thank the customer before leaving'
+  ]);
+
+  addSubSection('Emergency Contact', [
+    'For emergencies, contact TradeWork Today immediately at the dispatch number provided. After-hours emergencies should be reported via the emergency line.'
+  ]);
+
+  doc.addPage();
+  addHeader(7);
+  y = 35;
+
+  addSection('6. ATTENDANCE & AVAILABILITY', [
+    'Reliable attendance is crucial to our customers and business operations.'
+  ]);
+
+  addSubSection('Job Acceptance', [
+    '• Only accept jobs you can complete on time',
+    '• Arrive at scheduled time or within 15-minute window',
+    '• If running late, notify dispatch AND customer immediately',
+    '• Provide realistic time estimates for job completion'
+  ]);
+
+  addSubSection('Cancellations', [
+    '• Cancellations must be made at least 24 hours in advance when possible',
+    '• Emergency cancellations should be reported immediately',
+    '• Repeated no-shows or last-minute cancellations may result in termination',
+    '• If sick, do not go to job sites - notify dispatch to reschedule'
+  ]);
+
+  addSection('7. EQUIPMENT & TOOLS', [
+    'Contractors are expected to provide their own tools and equipment for their trade.'
+  ]);
+
+  addSubSection('Required Tools', [
+    '• Basic hand tools appropriate for your trade',
+    '• Power tools in good working condition',
+    '• Safety equipment (PPE)',
+    '• Reliable transportation',
+    '• Smartphone for communication and job tracking'
+  ]);
+
+  addSubSection('Tool Maintenance', [
+    '• Inspect tools before each use',
+    '• Keep tools clean and in good repair',
+    '• Replace worn or damaged equipment',
+    '• Do not use customer tools without permission'
+  ]);
+
+  doc.addPage();
+  addHeader(8);
+  y = 35;
+
+  addSection('8. VEHICLE & MILEAGE POLICY', [
+    'Your vehicle is essential to performing your work. Maintain it properly and drive safely.'
+  ]);
+
+  addSubSection('Vehicle Requirements', [
+    '• Valid driver\'s license (must be kept current)',
+    '• Current vehicle registration',
+    '• Auto insurance meeting Arizona minimum requirements',
+    '• Vehicle in safe, working condition',
+    '• Clean interior and exterior (you\'re representing us)'
+  ]);
+
+  addSubSection('Driving Standards', [
+    '• Obey all traffic laws',
+    '• No phone use while driving (hands-free only)',
+    '• No speeding or reckless driving',
+    '• Park legally and considerately at job sites',
+    '• Report any accidents or traffic violations'
+  ]);
+
+  addSubSection('Mileage', [
+    'Mileage between job sites may be reimbursable depending on the arrangement for specific jobs. Mileage to/from your home is generally not reimbursable. Keep accurate records of mileage for your own tax purposes.'
+  ]);
+
+  doc.addPage();
+  addHeader(9);
+  y = 35;
+
+  addSection('9. QUALITY STANDARDS', [
+    'TradeWork Today is built on quality workmanship. All work must meet professional standards.'
+  ]);
+
+  addSubSection('Workmanship', [
+    '• Complete all work to professional standards',
+    '• Follow manufacturer instructions and building codes',
+    '• Take pride in your work - treat every job like your own home',
+    '• If unsure about something, ask before proceeding',
+    '• Never cut corners on safety or quality'
+  ]);
+
+  addSubSection('Warranty', [
+    '• TradeWork Today warranties workmanship for 30 days',
+    '• Warranty callbacks must be addressed within 48 hours',
+    '• Document all work with photos as requested'
+  ]);
+
+  addSection('10. CUSTOMER SERVICE', [
+    'Excellent customer service is what sets us apart.'
+  ]);
+
+  addSubSection('Key Principles', [
+    '• Listen to the customer\'s needs',
+    '• Explain work clearly in non-technical terms',
+    '• Be honest about what can and cannot be done',
+    '• Respect the customer\'s home and property',
+    '• Leave the work area cleaner than you found it',
+    '• Follow up to ensure satisfaction'
+  ]);
+
+  doc.addPage();
+  addHeader(10);
+  y = 35;
+
+  addSection('11. PAYMENT & INVOICING', [
+    'Payment for completed work is processed according to our standard procedures.'
+  ]);
+
+  addSubSection('Payment Schedule', [
+    '• Payments are processed weekly (every Friday)',
+    '• Work must be marked complete in the system',
+    '• Customer must confirm job completion',
+    '• Disputes delay payment until resolved'
+  ]);
+
+  addSubSection('Rate Information', [
+    '• Rates are agreed upon before job acceptance',
+    '• Additional work requires customer approval AND dispatch notification',
+    '• Do not collect payment directly from customers',
+    '• All payments go through TradeWork Today'
+  ]);
+
+  addSection('12. TERMINATION', [
+    'The contractor relationship may be terminated by either party at any time with notice.'
+  ]);
+
+  addSubSection('Grounds for Immediate Termination', [
+    '• Safety violations',
+    '• Customer complaints of theft or dishonesty',
+    '• Working under the influence',
+    '• Harassment or discrimination',
+    '• Repeated no-shows or cancellations',
+    '• Misrepresentation of qualifications',
+    '• Direct solicitation of TradeWork Today customers'
+  ]);
+
+  addSubSection('Voluntary Separation', [
+    '• Provide at least 7 days notice when possible',
+    '• Complete any accepted jobs or arrange handoff',
+    '• Return any company property or materials',
+    '• Submit final hours/invoices for payment'
+  ]);
+
+  // Final Page
+  doc.addPage();
+  addHeader(doc.getNumberOfPages());
+  y = 60;
+
+  doc.setFillColor(251, 191, 36);
+  doc.rect(margin, y, pageWidth - (margin * 2), 80, 'F');
+  
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(26, 26, 26);
+  doc.text('ACKNOWLEDGMENT', pageWidth/2, y + 20, { align: 'center' });
+  
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  const ackText = 'By completing the online onboarding process, you acknowledge that you have received, read, and understood this Contractor Handbook. You agree to comply with all policies and procedures outlined herein.';
+  const ackLines = doc.splitTextToSize(ackText, pageWidth - (margin * 2) - 20);
+  doc.text(ackLines, pageWidth/2, y + 40, { align: 'center', maxWidth: pageWidth - (margin * 2) - 20 });
+
+  y += 110;
+  
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(12);
+  doc.text('CONTACT INFORMATION', margin, y);
+  y += 15;
+  
+  doc.setFontSize(10);
+  doc.text('Email: leealley2001@gmail.com', margin, y);
+  y += 8;
+  doc.text('Website: tradeworktoday.com', margin, y);
+  y += 8;
+  doc.text('Onboarding Portal: onboarding.tradeworktoday.com', margin, y);
+  
+  y += 30;
+  doc.setFontSize(9);
+  doc.setTextColor(100, 100, 100);
+  doc.text('© ' + new Date().getFullYear() + ' TradeWork Today LLC. All rights reserved.', pageWidth/2, y, { align: 'center' });
+  doc.text('This handbook is for informational purposes and does not constitute an employment contract.', pageWidth/2, y + 8, { align: 'center' });
+
+  return doc;
 };
 
 // Onboarding steps configuration
@@ -1262,6 +1884,106 @@ Welcome to the team!
                 Send Invite
               </button>
             </div>
+          </div>
+
+          {/* Resources Section */}
+          <div className="admin-card">
+            <h3 style={{ fontFamily: "'Oswald', sans-serif", color: '#fbbf24', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+              📚 Company Resources
+            </h3>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <button 
+                onClick={() => {
+                  const doc = generateContractorHandbookPDF();
+                  doc.save('TradeWork_Today_Contractor_Handbook.pdf');
+                }}
+                style={{ padding: '12px 20px', background: '#3b82f6', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '13px', cursor: 'pointer', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                📖 Download Contractor Handbook (PDF)
+              </button>
+              <button 
+                onClick={() => {
+                  const doc = new jsPDF();
+                  doc.setFontSize(20);
+                  doc.setFont('helvetica', 'bold');
+                  doc.text('TradeWork Today', 105, 30, { align: 'center' });
+                  doc.setFontSize(16);
+                  doc.text('1099 Contractor Onboarding Checklist', 105, 45, { align: 'center' });
+                  doc.setFontSize(11);
+                  doc.setFont('helvetica', 'normal');
+                  let y = 70;
+                  const items = [
+                    { label: 'Initial Contact', items: ['Phone screening completed', 'Trade skills verified', 'Availability discussed'] },
+                    { label: 'Online Onboarding Portal', items: ['Access code sent', 'Contractor agreement signed', 'W-9 completed', 'Background check authorized', 'Contractor details submitted', "Driver's license uploaded", 'Auto insurance uploaded', 'Safety agreement signed'] },
+                    { label: 'Admin Review', items: ['Documents reviewed', 'Background check cleared', 'Insurance verified', 'License verified'] },
+                    { label: 'Orientation', items: ['Handbook reviewed', 'Safety training completed', 'Communication tools set up', 'First job assigned'] }
+                  ];
+                  items.forEach(section => {
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(section.label, 20, y);
+                    y += 8;
+                    doc.setFont('helvetica', 'normal');
+                    section.items.forEach(item => {
+                      doc.rect(25, y - 4, 4, 4);
+                      doc.text(item, 35, y);
+                      y += 7;
+                    });
+                    y += 5;
+                  });
+                  doc.setFontSize(9);
+                  doc.text('Contractor Name: _______________________  Date: __________', 20, 250);
+                  doc.text('Admin Signature: _______________________  Date: __________', 20, 265);
+                  doc.save('1099_Onboarding_Checklist.pdf');
+                }}
+                style={{ padding: '12px 20px', background: '#059669', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '13px', cursor: 'pointer', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                ✅ Download Onboarding Checklist (PDF)
+              </button>
+              <button 
+                onClick={() => {
+                  const doc = new jsPDF();
+                  doc.setFontSize(20);
+                  doc.setFont('helvetica', 'bold');
+                  doc.text('TradeWork Today', 105, 25, { align: 'center' });
+                  doc.setFontSize(14);
+                  doc.text('SAFETY QUICK REFERENCE CARD', 105, 38, { align: 'center' });
+                  doc.setLineWidth(0.5);
+                  doc.line(20, 45, 190, 45);
+                  let y = 55;
+                  const sections = [
+                    { title: '🚨 EMERGENCY CONTACTS', items: ['911 - Police/Fire/Medical', 'Poison Control: 1-800-222-1222', 'TradeWork Today: (see dispatch info)'] },
+                    { title: '🦺 REQUIRED PPE', items: ['Safety glasses - cutting, drilling, overhead work', 'Work gloves - handling materials', 'Steel-toed boots - construction sites', 'Dust mask - dusty conditions', 'Hearing protection - loud equipment'] },
+                    { title: '🪜 LADDER SAFETY', items: ['Inspect before each use', '3 points of contact always', 'Never top two rungs', 'Stable, level surface', 'Face ladder when climbing'] },
+                    { title: '⚡ ELECTRICAL SAFETY', items: ['Turn off power before work', 'Test circuits before touching', 'Never work on live circuits', 'Keep away from water'] },
+                    { title: '📝 INCIDENT REPORTING', items: ['Report ALL injuries immediately', 'Report property damage', 'Report near-misses', 'Document with photos'] }
+                  ];
+                  doc.setFontSize(10);
+                  sections.forEach(section => {
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(section.title, 20, y);
+                    y += 6;
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(9);
+                    section.items.forEach(item => {
+                      doc.text('• ' + item, 25, y);
+                      y += 5;
+                    });
+                    y += 4;
+                    doc.setFontSize(10);
+                  });
+                  doc.setFontSize(8);
+                  doc.setTextColor(100, 100, 100);
+                  doc.text('Keep this card in your vehicle. Safety first!', 105, 280, { align: 'center' });
+                  doc.save('Safety_Quick_Reference.pdf');
+                }}
+                style={{ padding: '12px 20px', background: '#dc2626', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '13px', cursor: 'pointer', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                🦺 Download Safety Quick Reference (PDF)
+              </button>
+            </div>
+            <p style={{ marginTop: '12px', fontSize: '12px', color: '#666' }}>
+              These resources can be printed and shared with contractors. The handbook is also referenced during the online onboarding process.
+            </p>
           </div>
 
           <div className="admin-card">
