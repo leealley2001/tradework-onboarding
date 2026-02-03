@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { jsPDF } from 'jspdf';
 
 // Use the same Supabase instance as main site
 const supabase = createClient(
@@ -10,12 +11,338 @@ const supabase = createClient(
 const ADMIN_PASSWORD = "Tradework2026";
 const COMPANY_EMAIL = "leealley2001@gmail.com";
 
+// PDF Generation Functions
+const generateContractorAgreementPDF = (contractor, formData, signature) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = 20;
+
+  // Header
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TRADE WORK TODAY', pageWidth / 2, y, { align: 'center' });
+  y += 8;
+  doc.setFontSize(16);
+  doc.text('INDEPENDENT CONTRACTOR AGREEMENT', pageWidth / 2, y, { align: 'center' });
+  y += 15;
+
+  // Intro
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  const intro = `This Independent Contractor Agreement ("Agreement") is entered into between TradeWork Today LLC ("Company") and ${contractor.name} ("Contractor") on ${new Date(signature.signed_at).toLocaleDateString()}.`;
+  const introLines = doc.splitTextToSize(intro, 170);
+  doc.text(introLines, 20, y);
+  y += introLines.length * 6 + 10;
+
+  // Sections
+  const sections = [
+    { title: '1. INDEPENDENT CONTRACTOR STATUS', text: 'Contractor is an independent contractor and not an employee of Company. Contractor is responsible for their own taxes, insurance, and benefits. Contractor has the right to accept or decline any work assignment.' },
+    { title: '2. SERVICES', text: `Contractor agrees to perform ${contractor.trade} services as assigned and accepted. All work shall be performed in a professional manner consistent with industry standards.` },
+    { title: '3. COMPENSATION', text: 'Contractor shall be compensated at the agreed-upon rate for each job. Payment will be processed weekly.' },
+    { title: '4. INSURANCE', text: 'Contractor shall maintain general liability insurance and auto insurance meeting Arizona minimum requirements.' },
+    { title: '5. SAFETY', text: 'Contractor agrees to follow all OSHA regulations and safety guidelines. Contractor shall use appropriate PPE and report any incidents immediately.' },
+    { title: '6. CONFIDENTIALITY', text: 'Contractor agrees to keep customer information confidential and not solicit Company customers directly.' },
+    { title: '7. TERMINATION', text: 'Either party may terminate this Agreement at any time with 7 days written notice.' },
+    { title: '8. GOVERNING LAW', text: 'This Agreement is governed by the laws of Arizona.' }
+  ];
+
+  sections.forEach(section => {
+    if (y > 250) { doc.addPage(); y = 20; }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text(section.title, 20, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    const lines = doc.splitTextToSize(section.text, 170);
+    doc.text(lines, 20, y);
+    y += lines.length * 5 + 8;
+  });
+
+  // Signature block
+  if (y > 220) { doc.addPage(); y = 20; }
+  y += 10;
+  doc.setDrawColor(0);
+  doc.line(20, y, 190, y);
+  y += 15;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('ELECTRONIC SIGNATURE', 20, y);
+  y += 10;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Contractor Name: ${contractor.name}`, 20, y); y += 6;
+  doc.text(`Email: ${contractor.email}`, 20, y); y += 6;
+  doc.text(`Trade: ${contractor.trade}`, 20, y); y += 10;
+
+  doc.setFont('times', 'italic');
+  doc.setFontSize(18);
+  doc.text(signature.signature, 20, y);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Electronically signed on: ${new Date(signature.signed_at).toLocaleString()}`, 20, y);
+  y += 6;
+  doc.text('This electronic signature has the same legal effect as a handwritten signature.', 20, y);
+
+  return doc;
+};
+
+const generateW9PDF = (contractor, formData, signature) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = 20;
+
+  // Header
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TRADE WORK TODAY', pageWidth / 2, y, { align: 'center' });
+  y += 8;
+  doc.setFontSize(16);
+  doc.text('W-9 TAX INFORMATION', pageWidth / 2, y, { align: 'center' });
+  y += 15;
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Request for Taxpayer Identification Number and Certification', pageWidth / 2, y, { align: 'center' });
+  y += 15;
+
+  // Tax info
+  const fields = [
+    { label: 'Legal Name', value: formData.w9_name || contractor.name },
+    { label: 'Business Name', value: formData.w9_business || 'N/A' },
+    { label: 'Tax Classification', value: formData.w9_classification || 'Not specified' },
+    { label: 'Address', value: formData.w9_address || 'Not provided' },
+    { label: 'City, State, ZIP', value: `${formData.w9_city || ''}, ${formData.w9_state || ''} ${formData.w9_zip || ''}` },
+    { label: 'SSN/EIN', value: '***-**-' + (formData.w9_ssn ? formData.w9_ssn.slice(-4) : '****') + ' (on file)' }
+  ];
+
+  doc.setFontSize(11);
+  fields.forEach(field => {
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${field.label}:`, 20, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(field.value, 70, y);
+    y += 8;
+  });
+
+  y += 10;
+
+  // Certification
+  doc.setFont('helvetica', 'bold');
+  doc.text('CERTIFICATION', 20, y);
+  y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  const certText = 'Under penalties of perjury, I certify that: (1) The number shown on this form is my correct taxpayer identification number, (2) I am not subject to backup withholding, (3) I am a U.S. citizen or other U.S. person, and (4) I am exempt from FATCA reporting.';
+  const certLines = doc.splitTextToSize(certText, 170);
+  doc.text(certLines, 20, y);
+  y += certLines.length * 5 + 15;
+
+  // Signature
+  doc.line(20, y, 190, y);
+  y += 15;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('ELECTRONIC SIGNATURE', 20, y);
+  y += 10;
+
+  doc.setFont('times', 'italic');
+  doc.setFontSize(18);
+  doc.text(signature.signature, 20, y);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Electronically signed on: ${new Date(signature.signed_at).toLocaleString()}`, 20, y);
+
+  return doc;
+};
+
+const generateBackgroundCheckPDF = (contractor, formData, signature) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = 20;
+
+  // Header
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TRADE WORK TODAY', pageWidth / 2, y, { align: 'center' });
+  y += 8;
+  doc.setFontSize(16);
+  doc.text('BACKGROUND CHECK AUTHORIZATION', pageWidth / 2, y, { align: 'center' });
+  y += 20;
+
+  // Personal info
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('APPLICANT INFORMATION', 20, y);
+  y += 10;
+
+  const fields = [
+    { label: 'Full Legal Name', value: formData.bg_name || contractor.name },
+    { label: 'Date of Birth', value: formData.bg_dob || 'Not provided' },
+    { label: 'Other Names Used', value: formData.bg_aliases || 'None' },
+    { label: 'Driver License #', value: formData.bg_dl || 'Not provided' },
+    { label: 'DL State', value: formData.bg_dl_state || 'Not provided' }
+  ];
+
+  doc.setFontSize(10);
+  fields.forEach(field => {
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${field.label}:`, 20, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(field.value, 70, y);
+    y += 7;
+  });
+
+  y += 10;
+
+  // Authorization text
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('AUTHORIZATION', 20, y);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  const authText = `I, ${formData.bg_name || contractor.name}, hereby authorize TradeWork Today LLC and its designated agents to conduct a background investigation for employment purposes. This investigation may include: criminal history records (federal, state, and local), driving records and motor vehicle reports, verification of identity and Social Security Number, and sex offender registry search.`;
+  const authLines = doc.splitTextToSize(authText, 170);
+  doc.text(authLines, 20, y);
+  y += authLines.length * 5 + 10;
+
+  const fcraText = 'I understand that a consumer report may be obtained for evaluation purposes in accordance with the Fair Credit Reporting Act. If adverse action is taken based on information in the report, a copy of the report and summary of consumer rights will be provided.';
+  const fcraLines = doc.splitTextToSize(fcraText, 170);
+  doc.text(fcraLines, 20, y);
+  y += fcraLines.length * 5 + 15;
+
+  // Signature
+  doc.line(20, y, 190, y);
+  y += 15;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('ELECTRONIC SIGNATURE', 20, y);
+  y += 10;
+
+  doc.setFont('times', 'italic');
+  doc.setFontSize(18);
+  doc.text(signature.signature, 20, y);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Electronically signed on: ${new Date(signature.signed_at).toLocaleString()}`, 20, y);
+
+  return doc;
+};
+
+const generateSafetyAgreementPDF = (contractor, formData, signature) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = 20;
+
+  // Header
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TRADE WORK TODAY', pageWidth / 2, y, { align: 'center' });
+  y += 8;
+  doc.setFontSize(16);
+  doc.text('SAFETY ACKNOWLEDGMENT', pageWidth / 2, y, { align: 'center' });
+  y += 20;
+
+  // Sections
+  const sections = [
+    { title: 'Personal Protective Equipment (PPE)', text: 'I will wear appropriate PPE including safety glasses, work gloves, steel-toed boots, and other equipment as required by each job.' },
+    { title: 'Tool Safety', text: 'I will inspect tools before use, report defects immediately, and use tools only for their intended purpose.' },
+    { title: 'Ladder & Fall Protection', text: 'I will follow proper ladder safety, maintain three points of contact, and use fall protection when working at heights.' },
+    { title: 'Incident Reporting', text: 'I will immediately report ALL accidents, injuries, near-misses, and property damage to TradeWork Today.' },
+    { title: 'Zero Tolerance', text: 'I understand that working under the influence of drugs or alcohol is strictly prohibited and grounds for immediate termination.' },
+    { title: 'Right to Refuse', text: 'I have the right to stop work and report any unsafe conditions without retaliation.' }
+  ];
+
+  doc.setFontSize(10);
+  sections.forEach(section => {
+    doc.setFont('helvetica', 'bold');
+    doc.text(section.title, 20, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    const lines = doc.splitTextToSize(section.text, 170);
+    doc.text(lines, 20, y);
+    y += lines.length * 5 + 8;
+  });
+
+  // Emergency contact
+  y += 5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('EMERGENCY CONTACT', 20, y);
+  y += 8;
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Name: ${formData.emergency_name || 'Not provided'}`, 20, y); y += 6;
+  doc.text(`Phone: ${formData.emergency_phone || 'Not provided'}`, 20, y); y += 6;
+  doc.text(`Relationship: ${formData.emergency_relationship || 'Not provided'}`, 20, y);
+  y += 15;
+
+  // Signature
+  doc.line(20, y, 190, y);
+  y += 15;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('ELECTRONIC SIGNATURE', 20, y);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text('I have read and understand all safety requirements. I agree to comply with all safety', 20, y); y += 5;
+  doc.text('policies and understand that failure to do so may result in termination.', 20, y);
+  y += 10;
+
+  doc.setFont('times', 'italic');
+  doc.setFontSize(18);
+  doc.text(signature.signature, 20, y);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Electronically signed on: ${new Date(signature.signed_at).toLocaleString()}`, 20, y);
+
+  return doc;
+};
+
+const downloadAllPDFs = (contractor, formData, signatures) => {
+  if (signatures.contractor_agreement) {
+    const doc = generateContractorAgreementPDF(contractor, formData, signatures.contractor_agreement);
+    doc.save(`${contractor.name.replace(/\s+/g, '_')}_Contractor_Agreement.pdf`);
+  }
+  if (signatures.w9) {
+    const doc = generateW9PDF(contractor, formData, signatures.w9);
+    doc.save(`${contractor.name.replace(/\s+/g, '_')}_W9.pdf`);
+  }
+  if (signatures.background_check) {
+    const doc = generateBackgroundCheckPDF(contractor, formData, signatures.background_check);
+    doc.save(`${contractor.name.replace(/\s+/g, '_')}_Background_Check.pdf`);
+  }
+  if (signatures.safety) {
+    const doc = generateSafetyAgreementPDF(contractor, formData, signatures.safety);
+    doc.save(`${contractor.name.replace(/\s+/g, '_')}_Safety_Agreement.pdf`);
+  }
+};
+
 // Onboarding steps configuration
 const ONBOARDING_STEPS = [
   { id: 'welcome', title: 'Welcome', icon: '👋' },
   { id: 'contractor_agreement', title: 'Contractor Agreement', icon: '📋' },
   { id: 'w9', title: 'W-9 Tax Form', icon: '📄' },
   { id: 'background_check', title: 'Background Check', icon: '🔍' },
+  { id: 'contractor_details', title: 'Your Details', icon: '👤' },
   { id: 'drivers_license', title: "Driver's License", icon: '🚗' },
   { id: 'insurance', title: 'Auto Insurance', icon: '🛡️' },
   { id: 'safety', title: 'Safety Agreement', icon: '⚠️' },
@@ -35,6 +362,8 @@ export default function ContractorOnboarding() {
   const [allContractors, setAllContractors] = useState([]);
   const [adminPassword, setAdminPassword] = useState('');
   const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [newInvite, setNewInvite] = useState({ name: '', email: '', trade: '', phone: '' });
+  const [selectedContractor, setSelectedContractor] = useState(null);
 
   // Load contractor data on access code entry
   const handleAccessCodeSubmit = async () => {
@@ -115,31 +444,105 @@ export default function ContractorOnboarding() {
   // Move to next step
   const nextStep = async () => {
     const newStep = currentStep + 1;
+    
     setCurrentStep(newStep);
     await saveProgress(newStep, formData, signatures, uploads);
 
-    // If completed, send notification
+    // If completed, send notifications
     if (newStep === ONBOARDING_STEPS.length - 1) {
       await supabase
         .from('onboarding')
         .update({ status: 'completed', completed_at: new Date().toISOString() })
         .eq('id', contractor.id);
 
-      // Email notification
+      // Build document summary
+      const signatureList = Object.entries(signatures).map(([key, sig]) => 
+        `✓ ${key.replace(/_/g, ' ').toUpperCase()}: Signed by "${sig.signature}" on ${new Date(sig.signed_at).toLocaleString()}`
+      ).join('\n');
+
+      const uploadList = Object.entries(uploads).map(([key, upload]) => 
+        `📎 ${key.replace(/_/g, ' ').toUpperCase()}: ${upload.url}`
+      ).join('\n');
+
+      const formSummary = Object.entries(formData)
+        .filter(([key, value]) => value && typeof value !== 'boolean')
+        .map(([key, value]) => `${key.replace(/_/g, ' ')}: ${value}`)
+        .join('\n');
+
+      // Email to HR with full details
       try {
         await fetch(`https://formsubmit.co/ajax/${COMPANY_EMAIL}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            _subject: `Onboarding Complete: ${contractor.name}`,
-            name: contractor.name,
-            email: contractor.email,
-            trade: contractor.trade,
-            status: 'Completed all onboarding steps',
+            _subject: `✅ ONBOARDING COMPLETE: ${contractor.name} - ${contractor.trade}`,
+            "1. Contractor Name": contractor.name,
+            "2. Email": contractor.email,
+            "3. Phone": contractor.phone || 'Not provided',
+            "4. Trade": contractor.trade,
+            "5. Completed": new Date().toLocaleString(),
+            "6. SIGNED DOCUMENTS": signatureList || 'None',
+            "7. UPLOADED FILES": uploadList || 'None',
+            "8. W-9 Name": formData.w9_name || contractor.name,
+            "9. W-9 Address": `${formData.w9_address || ''}, ${formData.w9_city || ''}, ${formData.w9_state || ''} ${formData.w9_zip || ''}`,
+            "10. Tax Classification": formData.w9_classification || 'Not provided',
+            "11. SSN/EIN": formData.w9_ssn ? '***PROVIDED***' : 'Not provided',
+            "12. Date of Birth": formData.bg_dob || 'Not provided',
+            "13. Driver License #": formData.bg_dl || 'Not provided',
+            "14. DL State": formData.bg_dl_state || 'Not provided',
+            "15. DL Expiration": formData.dl_expiration || 'Not provided',
+            "16. Insurance Company": formData.ins_company || 'Not provided',
+            "17. Insurance Policy #": formData.ins_policy || 'Not provided',
+            "18. Insurance Expiration": formData.ins_expiration || 'Not provided',
+            "19. Emergency Contact": formData.emergency_name || 'Not provided',
+            "20. Emergency Phone": formData.emergency_phone || 'Not provided',
+            "21. Emergency Relationship": formData.emergency_relationship || 'Not provided',
+            "22. CERTIFICATIONS": (formData.certifications || []).join(', ') || 'None selected',
+            "23. Other Certs": formData.other_certifications || 'None',
+            "24. Vehicle": `${formData.vehicle_year || ''} ${formData.vehicle_make || ''} ${formData.vehicle_model || ''} (${formData.vehicle_color || ''})`,
+            "25. License Plate": formData.vehicle_plate || 'Not provided',
+            "26. TOOLS OWNED": (formData.tools || []).join(', ') || 'None selected',
+            "27. Other Tools": formData.other_tools || 'None',
+            "28. Work Radius": formData.work_radius ? `${formData.work_radius} miles` : 'Not specified',
+            "29. Availability": formData.availability || 'Not specified',
+            "30. Desired Rate": formData.hourly_rate ? `$${formData.hourly_rate}/hr` : 'Not specified',
             _template: "table"
           }),
         });
-      } catch (e) { console.error('Email error:', e); }
+      } catch (e) { console.error('HR email error:', e); }
+
+      // Email to CONTRACTOR with confirmation
+      try {
+        await fetch(`https://formsubmit.co/ajax/${contractor.email}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            _subject: `TradeWork Today - Your Onboarding is Complete!`,
+            message: `Hi ${contractor.name},
+
+Congratulations! You have successfully completed your onboarding with TradeWork Today.
+
+DOCUMENTS SIGNED:
+${signatureList || 'None'}
+
+DOCUMENTS UPLOADED:
+${uploadList || 'None'}
+
+WHAT'S NEXT:
+• We will review your information
+• Background check processing (1-3 business days)
+• You'll receive a call to discuss available jobs
+
+IMPORTANT: Please keep this email for your records.
+
+If you have any questions, reply to this email or contact us at ${COMPANY_EMAIL}.
+
+Welcome to the team!
+- TradeWork Today`,
+            _template: "box"
+          }),
+        });
+      } catch (e) { console.error('Contractor email error:', e); }
     }
   };
 
@@ -189,6 +592,61 @@ export default function ContractorOnboarding() {
       return data;
     }
     return null;
+  };
+
+  // Admin: Delete contractor
+  const deleteContractor = async (id, name) => {
+    if (window.confirm(`Are you sure you want to delete ${name}? This cannot be undone.`)) {
+      const { error } = await supabase
+        .from('onboarding')
+        .delete()
+        .eq('id', id);
+      
+      if (!error) {
+        loadAllContractors();
+        setSelectedContractor(null);
+      }
+    }
+  };
+
+  // Admin: Resend invite email
+  const resendInvite = async (contractor) => {
+    try {
+      await fetch(`https://formsubmit.co/ajax/${contractor.email}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          _subject: `Reminder: Complete Your TradeWork Today Onboarding`,
+          message: `Hi ${contractor.name},\n\nThis is a friendly reminder to complete your onboarding with TradeWork Today.\n\nGo to: onboarding.tradeworktoday.com\n\nYour access code is: ${contractor.access_code}\n\nThis takes about 10-15 minutes. Please complete it as soon as possible so we can get you working!\n\nQuestions? Reply to this email.\n\n- TradeWork Today Team`,
+          _template: "box"
+        }),
+      });
+      alert(`Reminder sent to ${contractor.email}`);
+    } catch (e) {
+      alert('Failed to send reminder');
+    }
+  };
+
+  // Admin: Reset contractor progress (let them start over)
+  const resetProgress = async (id, name) => {
+    if (window.confirm(`Reset ${name}'s onboarding progress? They will need to start over from the beginning.`)) {
+      const { error } = await supabase
+        .from('onboarding')
+        .update({
+          current_step: 0,
+          status: 'pending',
+          form_data: {},
+          signatures: {},
+          uploads: {},
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+      
+      if (!error) {
+        loadAllContractors();
+        setSelectedContractor(null);
+      }
+    }
   };
 
   // Styles matching the main site
@@ -751,8 +1209,6 @@ export default function ContractorOnboarding() {
 
   // ADMIN VIEW
   if (view === 'admin') {
-    const [newInvite, setNewInvite] = useState({ name: '', email: '', trade: '', phone: '' });
-    
     return (
       <div style={{ minHeight: '100vh', background: '#0d0d0d', fontFamily: "'Work Sans', sans-serif", color: '#e8e8e8' }}>
         <style>{styles}</style>
@@ -808,6 +1264,7 @@ export default function ContractorOnboarding() {
                   <th>Progress</th>
                   <th>Status</th>
                   <th>Created</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -834,11 +1291,33 @@ export default function ContractorOnboarding() {
                     <td style={{ color: '#666', fontSize: '12px' }}>
                       {new Date(c.created_at).toLocaleDateString()}
                     </td>
+                    <td>
+                      <button 
+                        onClick={() => setSelectedContractor(c)}
+                        style={{ padding: '6px 10px', background: '#fbbf24', border: 'none', color: '#1a1a1a', fontFamily: "'Oswald', sans-serif", fontSize: '10px', cursor: 'pointer', textTransform: 'uppercase', marginRight: '4px' }}
+                      >
+                        View
+                      </button>
+                      {c.status !== 'completed' && (
+                        <button 
+                          onClick={() => resendInvite(c)}
+                          style={{ padding: '6px 10px', background: '#3b82f6', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '10px', cursor: 'pointer', textTransform: 'uppercase', marginRight: '4px' }}
+                        >
+                          Resend
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => deleteContractor(c.id, c.name)}
+                        style={{ padding: '6px 10px', background: '#dc2626', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '10px', cursor: 'pointer', textTransform: 'uppercase' }}
+                      >
+                        Delete
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {allContractors.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
                       No contractors yet. Send an invite above to get started.
                     </td>
                   </tr>
@@ -847,6 +1326,173 @@ export default function ContractorOnboarding() {
             </table>
           </div>
         </div>
+
+        {/* Details Modal */}
+        {selectedContractor && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, overflow: 'auto', padding: '40px' }}>
+            <div style={{ maxWidth: '900px', margin: '0 auto', background: '#1a1a1a', border: '3px solid #fbbf24', padding: '30px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '2px solid #333', paddingBottom: '16px' }}>
+                <h2 style={{ fontFamily: "'Oswald', sans-serif", color: '#fbbf24', fontSize: '24px', textTransform: 'uppercase' }}>
+                  {selectedContractor.name}
+                </h2>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {selectedContractor.status !== 'completed' && (
+                    <>
+                      <button 
+                        onClick={() => resendInvite(selectedContractor)}
+                        style={{ padding: '10px 16px', background: '#3b82f6', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '12px', cursor: 'pointer', textTransform: 'uppercase' }}
+                      >
+                        📧 Resend Invite
+                      </button>
+                      <button 
+                        onClick={() => resetProgress(selectedContractor.id, selectedContractor.name)}
+                        style={{ padding: '10px 16px', background: '#f59e0b', border: 'none', color: '#1a1a1a', fontFamily: "'Oswald', sans-serif", fontSize: '12px', cursor: 'pointer', textTransform: 'uppercase' }}
+                      >
+                        🔄 Reset Progress
+                      </button>
+                    </>
+                  )}
+                  <button 
+                    onClick={() => deleteContractor(selectedContractor.id, selectedContractor.name)}
+                    style={{ padding: '10px 16px', background: '#dc2626', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '12px', cursor: 'pointer', textTransform: 'uppercase' }}
+                  >
+                    🗑️ Delete
+                  </button>
+                  <button 
+                    onClick={() => setSelectedContractor(null)}
+                    style={{ padding: '10px 16px', background: '#333', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '12px', cursor: 'pointer' }}
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+              </div>
+
+              {/* Basic Info */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                <div style={{ background: '#222', padding: '16px' }}>
+                  <div style={{ color: '#888', fontSize: '12px', textTransform: 'uppercase', marginBottom: '4px' }}>Email</div>
+                  <div>{selectedContractor.email}</div>
+                </div>
+                <div style={{ background: '#222', padding: '16px' }}>
+                  <div style={{ color: '#888', fontSize: '12px', textTransform: 'uppercase', marginBottom: '4px' }}>Phone</div>
+                  <div>{selectedContractor.phone || 'Not provided'}</div>
+                </div>
+                <div style={{ background: '#222', padding: '16px' }}>
+                  <div style={{ color: '#888', fontSize: '12px', textTransform: 'uppercase', marginBottom: '4px' }}>Trade</div>
+                  <div style={{ color: '#fbbf24' }}>{selectedContractor.trade}</div>
+                </div>
+              </div>
+
+              {/* Signatures */}
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h3 style={{ fontFamily: "'Oswald', sans-serif", color: '#fbbf24', fontSize: '16px', textTransform: 'uppercase' }}>
+                    ✍️ Signed Documents
+                  </h3>
+                  {selectedContractor.signatures && Object.keys(selectedContractor.signatures).length > 0 && (
+                    <button
+                      onClick={() => downloadAllPDFs(selectedContractor, selectedContractor.form_data || {}, selectedContractor.signatures)}
+                      style={{ padding: '8px 16px', background: '#059669', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '12px', cursor: 'pointer', textTransform: 'uppercase' }}
+                    >
+                      📥 Download All PDFs
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {selectedContractor.signatures && Object.keys(selectedContractor.signatures).length > 0 ? (
+                    Object.entries(selectedContractor.signatures).map(([key, sig]) => (
+                      <div key={key} style={{ background: '#222', padding: '12px', borderLeft: '3px solid #059669' }}>
+                        <div style={{ color: '#059669', fontSize: '12px', textTransform: 'uppercase', marginBottom: '4px' }}>
+                          ✓ {key.replace(/_/g, ' ')}
+                        </div>
+                        <div style={{ fontFamily: "'Brush Script MT', cursive", fontSize: '20px' }}>{sig.signature}</div>
+                        <div style={{ color: '#666', fontSize: '11px', marginTop: '4px', marginBottom: '8px' }}>
+                          {new Date(sig.signed_at).toLocaleString()}
+                        </div>
+                        <button
+                          onClick={() => {
+                            let doc;
+                            if (key === 'contractor_agreement') {
+                              doc = generateContractorAgreementPDF(selectedContractor, selectedContractor.form_data || {}, sig);
+                            } else if (key === 'w9') {
+                              doc = generateW9PDF(selectedContractor, selectedContractor.form_data || {}, sig);
+                            } else if (key === 'background_check') {
+                              doc = generateBackgroundCheckPDF(selectedContractor, selectedContractor.form_data || {}, sig);
+                            } else if (key === 'safety') {
+                              doc = generateSafetyAgreementPDF(selectedContractor, selectedContractor.form_data || {}, sig);
+                            }
+                            if (doc) doc.save(`${selectedContractor.name.replace(/\s+/g, '_')}_${key}.pdf`);
+                          }}
+                          style={{ padding: '6px 12px', background: '#3b82f6', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '10px', cursor: 'pointer', textTransform: 'uppercase' }}
+                        >
+                          📄 Download PDF
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: '#666' }}>No signatures yet</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Uploads */}
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontFamily: "'Oswald', sans-serif", color: '#fbbf24', fontSize: '16px', marginBottom: '12px', textTransform: 'uppercase' }}>
+                  📎 Uploaded Documents
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                  {selectedContractor.uploads && Object.keys(selectedContractor.uploads).length > 0 ? (
+                    Object.entries(selectedContractor.uploads).map(([key, upload]) => (
+                      <div key={key} style={{ background: '#222', padding: '12px' }}>
+                        <div style={{ color: '#888', fontSize: '12px', textTransform: 'uppercase', marginBottom: '8px' }}>
+                          {key.replace(/_/g, ' ')}
+                        </div>
+                        <a 
+                          href={upload.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          style={{ display: 'inline-block', padding: '8px 16px', background: '#3b82f6', color: '#fff', textDecoration: 'none', fontFamily: "'Oswald', sans-serif", fontSize: '12px', textTransform: 'uppercase' }}
+                        >
+                          📄 View / Download
+                        </a>
+                        <div style={{ color: '#666', fontSize: '11px', marginTop: '8px' }}>{upload.name}</div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: '#666' }}>No uploads yet</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Form Data */}
+              <div>
+                <h3 style={{ fontFamily: "'Oswald', sans-serif", color: '#fbbf24', fontSize: '16px', marginBottom: '12px', textTransform: 'uppercase' }}>
+                  📋 Form Data
+                </h3>
+                <div style={{ background: '#222', padding: '16px', maxHeight: '300px', overflow: 'auto' }}>
+                  {selectedContractor.form_data && Object.keys(selectedContractor.form_data).length > 0 ? (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <tbody>
+                        {Object.entries(selectedContractor.form_data).map(([key, value]) => (
+                          <tr key={key} style={{ borderBottom: '1px solid #333' }}>
+                            <td style={{ padding: '8px', color: '#888', textTransform: 'uppercase', fontSize: '12px', width: '40%' }}>
+                              {key.replace(/_/g, ' ')}
+                            </td>
+                            <td style={{ padding: '8px' }}>
+                              {typeof value === 'boolean' ? (value ? '✓ Yes' : '✗ No') : value || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div style={{ color: '#666' }}>No form data yet</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1103,6 +1749,140 @@ export default function ContractorOnboarding() {
           </div>
         );
 
+      case 'contractor_details':
+        return (
+          <div>
+            <p style={{ marginBottom: '20px' }}>
+              Tell us more about your qualifications and equipment. This helps us match you with the right jobs.
+            </p>
+
+            <div className="form-group">
+              <label className="form-label">Certifications & Licenses</label>
+              <p style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>Check all that apply:</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                {['OSHA 10', 'OSHA 30', 'EPA 608', 'EPA 609', 'Journeyman License', 'Master License', 'Electrical License', 'Plumbing License', 'HVAC Certified', 'CPR/First Aid', 'Forklift Certified', 'Scissor Lift Certified', 'Confined Space', 'Fall Protection'].map(cert => (
+                  <div key={cert} className="checkbox-item" style={{ margin: 0 }}>
+                    <input 
+                      type="checkbox" 
+                      id={`cert-${cert}`}
+                      checked={formData.certifications?.includes(cert) || false}
+                      onChange={(e) => {
+                        const certs = formData.certifications || [];
+                        if (e.target.checked) {
+                          setFormData({...formData, certifications: [...certs, cert]});
+                        } else {
+                          setFormData({...formData, certifications: certs.filter(c => c !== cert)});
+                        }
+                      }}
+                    />
+                    <label htmlFor={`cert-${cert}`}>{cert}</label>
+                  </div>
+                ))}
+              </div>
+              <input 
+                className="form-field" 
+                placeholder="Other certifications (comma separated)" 
+                value={formData.other_certifications || ''} 
+                onChange={e => setFormData({...formData, other_certifications: e.target.value})}
+                style={{ marginTop: '12px' }}
+              />
+            </div>
+
+            <div style={{ marginTop: '24px', marginBottom: '24px', borderTop: '2px solid #eee', paddingTop: '24px' }}>
+              <label className="form-label">Vehicle Information</label>
+              <p style={{ fontSize: '13px', color: '#666', marginBottom: '12px' }}>You'll use your own vehicle to travel to job sites.</p>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '12px' }}>Vehicle Year</label>
+                  <input className="form-field" placeholder="e.g. 2019" value={formData.vehicle_year || ''} onChange={e => setFormData({...formData, vehicle_year: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '12px' }}>Make</label>
+                  <input className="form-field" placeholder="e.g. Ford" value={formData.vehicle_make || ''} onChange={e => setFormData({...formData, vehicle_make: e.target.value})} />
+                </div>
+              </div>
+              <div className="form-row" style={{ marginTop: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '12px' }}>Model</label>
+                  <input className="form-field" placeholder="e.g. F-150" value={formData.vehicle_model || ''} onChange={e => setFormData({...formData, vehicle_model: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '12px' }}>Color</label>
+                  <input className="form-field" placeholder="e.g. White" value={formData.vehicle_color || ''} onChange={e => setFormData({...formData, vehicle_color: e.target.value})} />
+                </div>
+              </div>
+              <div className="form-group" style={{ marginTop: '12px' }}>
+                <label className="form-label" style={{ fontSize: '12px' }}>License Plate</label>
+                <input className="form-field" placeholder="e.g. ABC1234" value={formData.vehicle_plate || ''} onChange={e => setFormData({...formData, vehicle_plate: e.target.value})} style={{ maxWidth: '200px' }} />
+              </div>
+            </div>
+
+            <div style={{ borderTop: '2px solid #eee', paddingTop: '24px' }}>
+              <label className="form-label">Tools & Equipment</label>
+              <p style={{ fontSize: '13px', color: '#666', marginBottom: '12px' }}>What tools do you own and can bring to job sites?</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                {['Basic Hand Tools', 'Power Drill', 'Circular Saw', 'Reciprocating Saw', 'Multimeter', 'Pipe Wrenches', 'Ladders (6ft+)', 'Extension Ladders', 'Tool Belt', 'Safety Equipment', 'Work Vehicle/Truck', 'Trailer'].map(tool => (
+                  <div key={tool} className="checkbox-item" style={{ margin: 0 }}>
+                    <input 
+                      type="checkbox" 
+                      id={`tool-${tool}`}
+                      checked={formData.tools?.includes(tool) || false}
+                      onChange={(e) => {
+                        const tools = formData.tools || [];
+                        if (e.target.checked) {
+                          setFormData({...formData, tools: [...tools, tool]});
+                        } else {
+                          setFormData({...formData, tools: tools.filter(t => t !== tool)});
+                        }
+                      }}
+                    />
+                    <label htmlFor={`tool-${tool}`}>{tool}</label>
+                  </div>
+                ))}
+              </div>
+              <textarea 
+                className="form-field" 
+                placeholder="List any other specialized tools or equipment you own..."
+                value={formData.other_tools || ''} 
+                onChange={e => setFormData({...formData, other_tools: e.target.value})}
+                rows={3}
+                style={{ resize: 'vertical' }}
+              />
+            </div>
+
+            <div style={{ marginTop: '24px', borderTop: '2px solid #eee', paddingTop: '24px' }}>
+              <label className="form-label">Work Preferences</label>
+              <div className="form-row" style={{ marginTop: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '12px' }}>Preferred Work Radius (miles from home)</label>
+                  <select className="form-field" value={formData.work_radius || ''} onChange={e => setFormData({...formData, work_radius: e.target.value})}>
+                    <option value="">Select</option>
+                    <option value="10">Up to 10 miles</option>
+                    <option value="25">Up to 25 miles</option>
+                    <option value="50">Up to 50 miles</option>
+                    <option value="any">Anywhere in Phoenix Metro</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '12px' }}>Availability</label>
+                  <select className="form-field" value={formData.availability || ''} onChange={e => setFormData({...formData, availability: e.target.value})}>
+                    <option value="">Select</option>
+                    <option value="full-time">Full-time (40+ hrs/week)</option>
+                    <option value="part-time">Part-time (20-30 hrs/week)</option>
+                    <option value="weekends">Weekends only</option>
+                    <option value="flexible">Flexible/On-call</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-group" style={{ marginTop: '12px' }}>
+                <label className="form-label" style={{ fontSize: '12px' }}>Desired Hourly Rate</label>
+                <input className="form-field" type="number" placeholder="e.g. 35" value={formData.hourly_rate || ''} onChange={e => setFormData({...formData, hourly_rate: e.target.value})} style={{ maxWidth: '150px' }} />
+                <span style={{ marginLeft: '8px', color: '#666' }}>$ / hour</span>
+              </div>
+            </div>
+          </div>
+        );
+
       case 'drivers_license':
         return (
           <div>
@@ -1317,6 +2097,7 @@ export default function ContractorOnboarding() {
       case 'contractor_agreement': return formData.agreedContractorAgreement && signatures.contractor_agreement;
       case 'w9': return formData.w9_certified && formData.w9_ssn && formData.w9_classification && signatures.w9;
       case 'background_check': return formData.bg_authorized && formData.bg_dob && signatures.background_check;
+      case 'contractor_details': return formData.vehicle_year && formData.vehicle_make && formData.vehicle_model && formData.availability;
       case 'drivers_license': return uploads.dl_front && uploads.dl_back && formData.dl_expiration;
       case 'insurance': return uploads.insurance && formData.ins_company && formData.ins_expiration;
       case 'safety': return formData.safety_agreed && formData.emergency_name && formData.emergency_phone && signatures.safety;
