@@ -36,6 +36,7 @@ export default function ContractorOnboarding() {
   const [adminPassword, setAdminPassword] = useState('');
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [newInvite, setNewInvite] = useState({ name: '', email: '', trade: '', phone: '' });
+  const [selectedContractor, setSelectedContractor] = useState(null);
 
   // Load contractor data on access code entry
   const handleAccessCodeSubmit = async () => {
@@ -119,28 +120,92 @@ export default function ContractorOnboarding() {
     setCurrentStep(newStep);
     await saveProgress(newStep, formData, signatures, uploads);
 
-    // If completed, send notification
+    // If completed, send notifications
     if (newStep === ONBOARDING_STEPS.length - 1) {
       await supabase
         .from('onboarding')
         .update({ status: 'completed', completed_at: new Date().toISOString() })
         .eq('id', contractor.id);
 
-      // Email notification
+      // Build document summary
+      const signatureList = Object.entries(signatures).map(([key, sig]) => 
+        `✓ ${key.replace(/_/g, ' ').toUpperCase()}: Signed by "${sig.signature}" on ${new Date(sig.signed_at).toLocaleString()}`
+      ).join('\n');
+
+      const uploadList = Object.entries(uploads).map(([key, upload]) => 
+        `📎 ${key.replace(/_/g, ' ').toUpperCase()}: ${upload.url}`
+      ).join('\n');
+
+      const formSummary = Object.entries(formData)
+        .filter(([key, value]) => value && typeof value !== 'boolean')
+        .map(([key, value]) => `${key.replace(/_/g, ' ')}: ${value}`)
+        .join('\n');
+
+      // Email to HR with full details
       try {
         await fetch(`https://formsubmit.co/ajax/${COMPANY_EMAIL}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            _subject: `Onboarding Complete: ${contractor.name}`,
-            name: contractor.name,
-            email: contractor.email,
-            trade: contractor.trade,
-            status: 'Completed all onboarding steps',
+            _subject: `✅ ONBOARDING COMPLETE: ${contractor.name} - ${contractor.trade}`,
+            "1. Contractor Name": contractor.name,
+            "2. Email": contractor.email,
+            "3. Phone": contractor.phone || 'Not provided',
+            "4. Trade": contractor.trade,
+            "5. Completed": new Date().toLocaleString(),
+            "6. SIGNED DOCUMENTS": signatureList || 'None',
+            "7. UPLOADED FILES": uploadList || 'None',
+            "8. W-9 Name": formData.w9_name || contractor.name,
+            "9. W-9 Address": `${formData.w9_address || ''}, ${formData.w9_city || ''}, ${formData.w9_state || ''} ${formData.w9_zip || ''}`,
+            "10. Tax Classification": formData.w9_classification || 'Not provided',
+            "11. SSN/EIN": formData.w9_ssn ? '***PROVIDED***' : 'Not provided',
+            "12. Date of Birth": formData.bg_dob || 'Not provided',
+            "13. Driver License #": formData.bg_dl || 'Not provided',
+            "14. DL State": formData.bg_dl_state || 'Not provided',
+            "15. DL Expiration": formData.dl_expiration || 'Not provided',
+            "16. Insurance Company": formData.ins_company || 'Not provided',
+            "17. Insurance Policy #": formData.ins_policy || 'Not provided',
+            "18. Insurance Expiration": formData.ins_expiration || 'Not provided',
+            "19. Emergency Contact": formData.emergency_name || 'Not provided',
+            "20. Emergency Phone": formData.emergency_phone || 'Not provided',
+            "21. Emergency Relationship": formData.emergency_relationship || 'Not provided',
             _template: "table"
           }),
         });
-      } catch (e) { console.error('Email error:', e); }
+      } catch (e) { console.error('HR email error:', e); }
+
+      // Email to CONTRACTOR with confirmation
+      try {
+        await fetch(`https://formsubmit.co/ajax/${contractor.email}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            _subject: `TradeWork Today - Your Onboarding is Complete!`,
+            message: `Hi ${contractor.name},
+
+Congratulations! You have successfully completed your onboarding with TradeWork Today.
+
+DOCUMENTS SIGNED:
+${signatureList || 'None'}
+
+DOCUMENTS UPLOADED:
+${uploadList || 'None'}
+
+WHAT'S NEXT:
+• We will review your information
+• Background check processing (1-3 business days)
+• You'll receive a call to discuss available jobs
+
+IMPORTANT: Please keep this email for your records.
+
+If you have any questions, reply to this email or contact us at ${COMPANY_EMAIL}.
+
+Welcome to the team!
+- TradeWork Today`,
+            _template: "box"
+          }),
+        });
+      } catch (e) { console.error('Contractor email error:', e); }
     }
   };
 
@@ -807,6 +872,7 @@ export default function ContractorOnboarding() {
                   <th>Progress</th>
                   <th>Status</th>
                   <th>Created</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -833,11 +899,19 @@ export default function ContractorOnboarding() {
                     <td style={{ color: '#666', fontSize: '12px' }}>
                       {new Date(c.created_at).toLocaleDateString()}
                     </td>
+                    <td>
+                      <button 
+                        onClick={() => setSelectedContractor(c)}
+                        style={{ padding: '6px 12px', background: '#fbbf24', border: 'none', color: '#1a1a1a', fontFamily: "'Oswald', sans-serif", fontSize: '11px', cursor: 'pointer', textTransform: 'uppercase' }}
+                      >
+                        View Details
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {allContractors.length === 0 && (
                   <tr>
-                    <td colSpan={7} style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
                       No contractors yet. Send an invite above to get started.
                     </td>
                   </tr>
@@ -846,6 +920,121 @@ export default function ContractorOnboarding() {
             </table>
           </div>
         </div>
+
+        {/* Details Modal */}
+        {selectedContractor && (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.9)', zIndex: 9999, overflow: 'auto', padding: '40px' }}>
+            <div style={{ maxWidth: '900px', margin: '0 auto', background: '#1a1a1a', border: '3px solid #fbbf24', padding: '30px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', borderBottom: '2px solid #333', paddingBottom: '16px' }}>
+                <h2 style={{ fontFamily: "'Oswald', sans-serif", color: '#fbbf24', fontSize: '24px', textTransform: 'uppercase' }}>
+                  {selectedContractor.name}
+                </h2>
+                <button 
+                  onClick={() => setSelectedContractor(null)}
+                  style={{ padding: '10px 20px', background: '#333', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", cursor: 'pointer' }}
+                >
+                  ✕ Close
+                </button>
+              </div>
+
+              {/* Basic Info */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+                <div style={{ background: '#222', padding: '16px' }}>
+                  <div style={{ color: '#888', fontSize: '12px', textTransform: 'uppercase', marginBottom: '4px' }}>Email</div>
+                  <div>{selectedContractor.email}</div>
+                </div>
+                <div style={{ background: '#222', padding: '16px' }}>
+                  <div style={{ color: '#888', fontSize: '12px', textTransform: 'uppercase', marginBottom: '4px' }}>Phone</div>
+                  <div>{selectedContractor.phone || 'Not provided'}</div>
+                </div>
+                <div style={{ background: '#222', padding: '16px' }}>
+                  <div style={{ color: '#888', fontSize: '12px', textTransform: 'uppercase', marginBottom: '4px' }}>Trade</div>
+                  <div style={{ color: '#fbbf24' }}>{selectedContractor.trade}</div>
+                </div>
+              </div>
+
+              {/* Signatures */}
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontFamily: "'Oswald', sans-serif", color: '#fbbf24', fontSize: '16px', marginBottom: '12px', textTransform: 'uppercase' }}>
+                  ✍️ Signatures
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {selectedContractor.signatures && Object.keys(selectedContractor.signatures).length > 0 ? (
+                    Object.entries(selectedContractor.signatures).map(([key, sig]) => (
+                      <div key={key} style={{ background: '#222', padding: '12px', borderLeft: '3px solid #059669' }}>
+                        <div style={{ color: '#059669', fontSize: '12px', textTransform: 'uppercase', marginBottom: '4px' }}>
+                          ✓ {key.replace(/_/g, ' ')}
+                        </div>
+                        <div style={{ fontFamily: "'Brush Script MT', cursive", fontSize: '20px' }}>{sig.signature}</div>
+                        <div style={{ color: '#666', fontSize: '11px', marginTop: '4px' }}>
+                          {new Date(sig.signed_at).toLocaleString()}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: '#666' }}>No signatures yet</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Uploads */}
+              <div style={{ marginBottom: '24px' }}>
+                <h3 style={{ fontFamily: "'Oswald', sans-serif", color: '#fbbf24', fontSize: '16px', marginBottom: '12px', textTransform: 'uppercase' }}>
+                  📎 Uploaded Documents
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                  {selectedContractor.uploads && Object.keys(selectedContractor.uploads).length > 0 ? (
+                    Object.entries(selectedContractor.uploads).map(([key, upload]) => (
+                      <div key={key} style={{ background: '#222', padding: '12px' }}>
+                        <div style={{ color: '#888', fontSize: '12px', textTransform: 'uppercase', marginBottom: '8px' }}>
+                          {key.replace(/_/g, ' ')}
+                        </div>
+                        <a 
+                          href={upload.url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          style={{ display: 'inline-block', padding: '8px 16px', background: '#3b82f6', color: '#fff', textDecoration: 'none', fontFamily: "'Oswald', sans-serif", fontSize: '12px', textTransform: 'uppercase' }}
+                        >
+                          📄 View / Download
+                        </a>
+                        <div style={{ color: '#666', fontSize: '11px', marginTop: '8px' }}>{upload.name}</div>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ color: '#666' }}>No uploads yet</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Form Data */}
+              <div>
+                <h3 style={{ fontFamily: "'Oswald', sans-serif", color: '#fbbf24', fontSize: '16px', marginBottom: '12px', textTransform: 'uppercase' }}>
+                  📋 Form Data
+                </h3>
+                <div style={{ background: '#222', padding: '16px', maxHeight: '300px', overflow: 'auto' }}>
+                  {selectedContractor.form_data && Object.keys(selectedContractor.form_data).length > 0 ? (
+                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                      <tbody>
+                        {Object.entries(selectedContractor.form_data).map(([key, value]) => (
+                          <tr key={key} style={{ borderBottom: '1px solid #333' }}>
+                            <td style={{ padding: '8px', color: '#888', textTransform: 'uppercase', fontSize: '12px', width: '40%' }}>
+                              {key.replace(/_/g, ' ')}
+                            </td>
+                            <td style={{ padding: '8px' }}>
+                              {typeof value === 'boolean' ? (value ? '✓ Yes' : '✗ No') : value || '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div style={{ color: '#666' }}>No form data yet</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
