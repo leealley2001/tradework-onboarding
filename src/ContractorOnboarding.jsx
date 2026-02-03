@@ -379,11 +379,16 @@ export default function ContractorOnboarding() {
       return;
     }
 
+    // Parse JSON strings if needed
+    const parsedFormData = typeof data.form_data === 'string' ? JSON.parse(data.form_data) : (data.form_data || {});
+    const parsedSignatures = typeof data.signatures === 'string' ? JSON.parse(data.signatures) : (data.signatures || {});
+    const parsedUploads = typeof data.uploads === 'string' ? JSON.parse(data.uploads) : (data.uploads || {});
+
     setContractor(data);
     setCurrentStep(data.current_step || 0);
-    setFormData(data.form_data || {});
-    setSignatures(data.signatures || {});
-    setUploads(data.uploads || {});
+    setFormData(parsedFormData);
+    setSignatures(parsedSignatures);
+    setUploads(parsedUploads);
     setView('onboarding');
   };
 
@@ -552,7 +557,16 @@ Welcome to the team!
       .from('onboarding')
       .select('*')
       .order('created_at', { ascending: false });
-    setAllContractors(data || []);
+    
+    // Parse JSON strings if needed
+    const parsed = (data || []).map(c => ({
+      ...c,
+      form_data: typeof c.form_data === 'string' ? JSON.parse(c.form_data) : (c.form_data || {}),
+      signatures: typeof c.signatures === 'string' ? JSON.parse(c.signatures) : (c.signatures || {}),
+      uploads: typeof c.uploads === 'string' ? JSON.parse(c.uploads) : (c.uploads || {})
+    }));
+    
+    setAllContractors(parsed);
   };
 
   // Admin: Create new onboarding invite
