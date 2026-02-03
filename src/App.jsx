@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { jsPDF } from 'jspdf';
 
 // Use the same Supabase instance as main site
 const supabase = createClient(
@@ -9,6 +10,331 @@ const supabase = createClient(
 
 const ADMIN_PASSWORD = "Tradework2026";
 const COMPANY_EMAIL = "leealley2001@gmail.com";
+
+// PDF Generation Functions
+const generateContractorAgreementPDF = (contractor, formData, signature) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = 20;
+
+  // Header
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TRADE WORK TODAY', pageWidth / 2, y, { align: 'center' });
+  y += 8;
+  doc.setFontSize(16);
+  doc.text('INDEPENDENT CONTRACTOR AGREEMENT', pageWidth / 2, y, { align: 'center' });
+  y += 15;
+
+  // Intro
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  const intro = `This Independent Contractor Agreement ("Agreement") is entered into between TradeWork Today LLC ("Company") and ${contractor.name} ("Contractor") on ${new Date(signature.signed_at).toLocaleDateString()}.`;
+  const introLines = doc.splitTextToSize(intro, 170);
+  doc.text(introLines, 20, y);
+  y += introLines.length * 6 + 10;
+
+  // Sections
+  const sections = [
+    { title: '1. INDEPENDENT CONTRACTOR STATUS', text: 'Contractor is an independent contractor and not an employee of Company. Contractor is responsible for their own taxes, insurance, and benefits. Contractor has the right to accept or decline any work assignment.' },
+    { title: '2. SERVICES', text: `Contractor agrees to perform ${contractor.trade} services as assigned and accepted. All work shall be performed in a professional manner consistent with industry standards.` },
+    { title: '3. COMPENSATION', text: 'Contractor shall be compensated at the agreed-upon rate for each job. Payment will be processed weekly.' },
+    { title: '4. INSURANCE', text: 'Contractor shall maintain general liability insurance and auto insurance meeting Arizona minimum requirements.' },
+    { title: '5. SAFETY', text: 'Contractor agrees to follow all OSHA regulations and safety guidelines. Contractor shall use appropriate PPE and report any incidents immediately.' },
+    { title: '6. CONFIDENTIALITY', text: 'Contractor agrees to keep customer information confidential and not solicit Company customers directly.' },
+    { title: '7. TERMINATION', text: 'Either party may terminate this Agreement at any time with 7 days written notice.' },
+    { title: '8. GOVERNING LAW', text: 'This Agreement is governed by the laws of Arizona.' }
+  ];
+
+  sections.forEach(section => {
+    if (y > 250) { doc.addPage(); y = 20; }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.text(section.title, 20, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    const lines = doc.splitTextToSize(section.text, 170);
+    doc.text(lines, 20, y);
+    y += lines.length * 5 + 8;
+  });
+
+  // Signature block
+  if (y > 220) { doc.addPage(); y = 20; }
+  y += 10;
+  doc.setDrawColor(0);
+  doc.line(20, y, 190, y);
+  y += 15;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('ELECTRONIC SIGNATURE', 20, y);
+  y += 10;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Contractor Name: ${contractor.name}`, 20, y); y += 6;
+  doc.text(`Email: ${contractor.email}`, 20, y); y += 6;
+  doc.text(`Trade: ${contractor.trade}`, 20, y); y += 10;
+
+  doc.setFont('times', 'italic');
+  doc.setFontSize(18);
+  doc.text(signature.signature, 20, y);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Electronically signed on: ${new Date(signature.signed_at).toLocaleString()}`, 20, y);
+  y += 6;
+  doc.text('This electronic signature has the same legal effect as a handwritten signature.', 20, y);
+
+  return doc;
+};
+
+const generateW9PDF = (contractor, formData, signature) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = 20;
+
+  // Header
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TRADE WORK TODAY', pageWidth / 2, y, { align: 'center' });
+  y += 8;
+  doc.setFontSize(16);
+  doc.text('W-9 TAX INFORMATION', pageWidth / 2, y, { align: 'center' });
+  y += 15;
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Request for Taxpayer Identification Number and Certification', pageWidth / 2, y, { align: 'center' });
+  y += 15;
+
+  // Tax info
+  const fields = [
+    { label: 'Legal Name', value: formData.w9_name || contractor.name },
+    { label: 'Business Name', value: formData.w9_business || 'N/A' },
+    { label: 'Tax Classification', value: formData.w9_classification || 'Not specified' },
+    { label: 'Address', value: formData.w9_address || 'Not provided' },
+    { label: 'City, State, ZIP', value: `${formData.w9_city || ''}, ${formData.w9_state || ''} ${formData.w9_zip || ''}` },
+    { label: 'SSN/EIN', value: '***-**-' + (formData.w9_ssn ? formData.w9_ssn.slice(-4) : '****') + ' (on file)' }
+  ];
+
+  doc.setFontSize(11);
+  fields.forEach(field => {
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${field.label}:`, 20, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(field.value, 70, y);
+    y += 8;
+  });
+
+  y += 10;
+
+  // Certification
+  doc.setFont('helvetica', 'bold');
+  doc.text('CERTIFICATION', 20, y);
+  y += 8;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  const certText = 'Under penalties of perjury, I certify that: (1) The number shown on this form is my correct taxpayer identification number, (2) I am not subject to backup withholding, (3) I am a U.S. citizen or other U.S. person, and (4) I am exempt from FATCA reporting.';
+  const certLines = doc.splitTextToSize(certText, 170);
+  doc.text(certLines, 20, y);
+  y += certLines.length * 5 + 15;
+
+  // Signature
+  doc.line(20, y, 190, y);
+  y += 15;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('ELECTRONIC SIGNATURE', 20, y);
+  y += 10;
+
+  doc.setFont('times', 'italic');
+  doc.setFontSize(18);
+  doc.text(signature.signature, 20, y);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Electronically signed on: ${new Date(signature.signed_at).toLocaleString()}`, 20, y);
+
+  return doc;
+};
+
+const generateBackgroundCheckPDF = (contractor, formData, signature) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = 20;
+
+  // Header
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TRADE WORK TODAY', pageWidth / 2, y, { align: 'center' });
+  y += 8;
+  doc.setFontSize(16);
+  doc.text('BACKGROUND CHECK AUTHORIZATION', pageWidth / 2, y, { align: 'center' });
+  y += 20;
+
+  // Personal info
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('APPLICANT INFORMATION', 20, y);
+  y += 10;
+
+  const fields = [
+    { label: 'Full Legal Name', value: formData.bg_name || contractor.name },
+    { label: 'Date of Birth', value: formData.bg_dob || 'Not provided' },
+    { label: 'Other Names Used', value: formData.bg_aliases || 'None' },
+    { label: 'Driver License #', value: formData.bg_dl || 'Not provided' },
+    { label: 'DL State', value: formData.bg_dl_state || 'Not provided' }
+  ];
+
+  doc.setFontSize(10);
+  fields.forEach(field => {
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${field.label}:`, 20, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(field.value, 70, y);
+    y += 7;
+  });
+
+  y += 10;
+
+  // Authorization text
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('AUTHORIZATION', 20, y);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  const authText = `I, ${formData.bg_name || contractor.name}, hereby authorize TradeWork Today LLC and its designated agents to conduct a background investigation for employment purposes. This investigation may include: criminal history records (federal, state, and local), driving records and motor vehicle reports, verification of identity and Social Security Number, and sex offender registry search.`;
+  const authLines = doc.splitTextToSize(authText, 170);
+  doc.text(authLines, 20, y);
+  y += authLines.length * 5 + 10;
+
+  const fcraText = 'I understand that a consumer report may be obtained for evaluation purposes in accordance with the Fair Credit Reporting Act. If adverse action is taken based on information in the report, a copy of the report and summary of consumer rights will be provided.';
+  const fcraLines = doc.splitTextToSize(fcraText, 170);
+  doc.text(fcraLines, 20, y);
+  y += fcraLines.length * 5 + 15;
+
+  // Signature
+  doc.line(20, y, 190, y);
+  y += 15;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('ELECTRONIC SIGNATURE', 20, y);
+  y += 10;
+
+  doc.setFont('times', 'italic');
+  doc.setFontSize(18);
+  doc.text(signature.signature, 20, y);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Electronically signed on: ${new Date(signature.signed_at).toLocaleString()}`, 20, y);
+
+  return doc;
+};
+
+const generateSafetyAgreementPDF = (contractor, formData, signature) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  let y = 20;
+
+  // Header
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TRADE WORK TODAY', pageWidth / 2, y, { align: 'center' });
+  y += 8;
+  doc.setFontSize(16);
+  doc.text('SAFETY ACKNOWLEDGMENT', pageWidth / 2, y, { align: 'center' });
+  y += 20;
+
+  // Sections
+  const sections = [
+    { title: 'Personal Protective Equipment (PPE)', text: 'I will wear appropriate PPE including safety glasses, work gloves, steel-toed boots, and other equipment as required by each job.' },
+    { title: 'Tool Safety', text: 'I will inspect tools before use, report defects immediately, and use tools only for their intended purpose.' },
+    { title: 'Ladder & Fall Protection', text: 'I will follow proper ladder safety, maintain three points of contact, and use fall protection when working at heights.' },
+    { title: 'Incident Reporting', text: 'I will immediately report ALL accidents, injuries, near-misses, and property damage to TradeWork Today.' },
+    { title: 'Zero Tolerance', text: 'I understand that working under the influence of drugs or alcohol is strictly prohibited and grounds for immediate termination.' },
+    { title: 'Right to Refuse', text: 'I have the right to stop work and report any unsafe conditions without retaliation.' }
+  ];
+
+  doc.setFontSize(10);
+  sections.forEach(section => {
+    doc.setFont('helvetica', 'bold');
+    doc.text(section.title, 20, y);
+    y += 6;
+    doc.setFont('helvetica', 'normal');
+    const lines = doc.splitTextToSize(section.text, 170);
+    doc.text(lines, 20, y);
+    y += lines.length * 5 + 8;
+  });
+
+  // Emergency contact
+  y += 5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('EMERGENCY CONTACT', 20, y);
+  y += 8;
+
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Name: ${formData.emergency_name || 'Not provided'}`, 20, y); y += 6;
+  doc.text(`Phone: ${formData.emergency_phone || 'Not provided'}`, 20, y); y += 6;
+  doc.text(`Relationship: ${formData.emergency_relationship || 'Not provided'}`, 20, y);
+  y += 15;
+
+  // Signature
+  doc.line(20, y, 190, y);
+  y += 15;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('ELECTRONIC SIGNATURE', 20, y);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text('I have read and understand all safety requirements. I agree to comply with all safety', 20, y); y += 5;
+  doc.text('policies and understand that failure to do so may result in termination.', 20, y);
+  y += 10;
+
+  doc.setFont('times', 'italic');
+  doc.setFontSize(18);
+  doc.text(signature.signature, 20, y);
+  y += 8;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Electronically signed on: ${new Date(signature.signed_at).toLocaleString()}`, 20, y);
+
+  return doc;
+};
+
+const downloadAllPDFs = (contractor, formData, signatures) => {
+  if (signatures.contractor_agreement) {
+    const doc = generateContractorAgreementPDF(contractor, formData, signatures.contractor_agreement);
+    doc.save(`${contractor.name.replace(/\s+/g, '_')}_Contractor_Agreement.pdf`);
+  }
+  if (signatures.w9) {
+    const doc = generateW9PDF(contractor, formData, signatures.w9);
+    doc.save(`${contractor.name.replace(/\s+/g, '_')}_W9.pdf`);
+  }
+  if (signatures.background_check) {
+    const doc = generateBackgroundCheckPDF(contractor, formData, signatures.background_check);
+    doc.save(`${contractor.name.replace(/\s+/g, '_')}_Background_Check.pdf`);
+  }
+  if (signatures.safety) {
+    const doc = generateSafetyAgreementPDF(contractor, formData, signatures.safety);
+    doc.save(`${contractor.name.replace(/\s+/g, '_')}_Safety_Agreement.pdf`);
+  }
+};
 
 // Onboarding steps configuration
 const ONBOARDING_STEPS = [
@@ -53,11 +379,16 @@ export default function ContractorOnboarding() {
       return;
     }
 
+    // Parse JSON strings if needed
+    const parsedFormData = typeof data.form_data === 'string' ? JSON.parse(data.form_data) : (data.form_data || {});
+    const parsedSignatures = typeof data.signatures === 'string' ? JSON.parse(data.signatures) : (data.signatures || {});
+    const parsedUploads = typeof data.uploads === 'string' ? JSON.parse(data.uploads) : (data.uploads || {});
+
     setContractor(data);
     setCurrentStep(data.current_step || 0);
-    setFormData(data.form_data || {});
-    setSignatures(data.signatures || {});
-    setUploads(data.uploads || {});
+    setFormData(parsedFormData);
+    setSignatures(parsedSignatures);
+    setUploads(parsedUploads);
     setView('onboarding');
   };
 
@@ -226,7 +557,16 @@ Welcome to the team!
       .from('onboarding')
       .select('*')
       .order('created_at', { ascending: false });
-    setAllContractors(data || []);
+    
+    // Parse JSON strings if needed
+    const parsed = (data || []).map(c => ({
+      ...c,
+      form_data: typeof c.form_data === 'string' ? JSON.parse(c.form_data) : (c.form_data || {}),
+      signatures: typeof c.signatures === 'string' ? JSON.parse(c.signatures) : (c.signatures || {}),
+      uploads: typeof c.uploads === 'string' ? JSON.parse(c.uploads) : (c.uploads || {})
+    }));
+    
+    setAllContractors(parsed);
   };
 
   // Admin: Create new onboarding invite
@@ -890,7 +1230,7 @@ Welcome to the team!
         <header className="admin-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
             <button className="admin-back-btn" onClick={() => setView('login')}>← Back</button>
-            <h1 className="admin-title">Onboarding Admin</h1>
+            <h1 className="admin-title">Onboarding Admin v2.0</h1>
           </div>
           <button className="admin-back-btn" onClick={loadAllContractors}>↻ Refresh</button>
         </header>
@@ -1059,9 +1399,19 @@ Welcome to the team!
 
               {/* Signatures */}
               <div style={{ marginBottom: '24px' }}>
-                <h3 style={{ fontFamily: "'Oswald', sans-serif", color: '#fbbf24', fontSize: '16px', marginBottom: '12px', textTransform: 'uppercase' }}>
-                  ✍️ Signatures
-                </h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h3 style={{ fontFamily: "'Oswald', sans-serif", color: '#fbbf24', fontSize: '16px', textTransform: 'uppercase' }}>
+                    ✍️ Signed Documents
+                  </h3>
+                  {selectedContractor.signatures && Object.keys(selectedContractor.signatures).length > 0 && (
+                    <button
+                      onClick={() => downloadAllPDFs(selectedContractor, selectedContractor.form_data || {}, selectedContractor.signatures)}
+                      style={{ padding: '8px 16px', background: '#059669', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '12px', cursor: 'pointer', textTransform: 'uppercase' }}
+                    >
+                      📥 Download All PDFs
+                    </button>
+                  )}
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   {selectedContractor.signatures && Object.keys(selectedContractor.signatures).length > 0 ? (
                     Object.entries(selectedContractor.signatures).map(([key, sig]) => (
@@ -1070,9 +1420,27 @@ Welcome to the team!
                           ✓ {key.replace(/_/g, ' ')}
                         </div>
                         <div style={{ fontFamily: "'Brush Script MT', cursive", fontSize: '20px' }}>{sig.signature}</div>
-                        <div style={{ color: '#666', fontSize: '11px', marginTop: '4px' }}>
+                        <div style={{ color: '#666', fontSize: '11px', marginTop: '4px', marginBottom: '8px' }}>
                           {new Date(sig.signed_at).toLocaleString()}
                         </div>
+                        <button
+                          onClick={() => {
+                            let doc;
+                            if (key === 'contractor_agreement') {
+                              doc = generateContractorAgreementPDF(selectedContractor, selectedContractor.form_data || {}, sig);
+                            } else if (key === 'w9') {
+                              doc = generateW9PDF(selectedContractor, selectedContractor.form_data || {}, sig);
+                            } else if (key === 'background_check') {
+                              doc = generateBackgroundCheckPDF(selectedContractor, selectedContractor.form_data || {}, sig);
+                            } else if (key === 'safety') {
+                              doc = generateSafetyAgreementPDF(selectedContractor, selectedContractor.form_data || {}, sig);
+                            }
+                            if (doc) doc.save(`${selectedContractor.name.replace(/\s+/g, '_')}_${key}.pdf`);
+                          }}
+                          style={{ padding: '6px 12px', background: '#3b82f6', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '10px', cursor: 'pointer', textTransform: 'uppercase' }}
+                        >
+                          📄 Download PDF
+                        </button>
                       </div>
                     ))
                   ) : (
