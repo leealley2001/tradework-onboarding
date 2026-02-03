@@ -16,6 +16,7 @@ const ONBOARDING_STEPS = [
   { id: 'contractor_agreement', title: 'Contractor Agreement', icon: '📋' },
   { id: 'w9', title: 'W-9 Tax Form', icon: '📄' },
   { id: 'background_check', title: 'Background Check', icon: '🔍' },
+  { id: 'contractor_details', title: 'Your Details', icon: '👤' },
   { id: 'drivers_license', title: "Driver's License", icon: '🚗' },
   { id: 'insurance', title: 'Auto Insurance', icon: '🛡️' },
   { id: 'safety', title: 'Safety Agreement', icon: '⚠️' },
@@ -117,6 +118,7 @@ export default function ContractorOnboarding() {
   // Move to next step
   const nextStep = async () => {
     const newStep = currentStep + 1;
+    
     setCurrentStep(newStep);
     await saveProgress(newStep, formData, signatures, uploads);
 
@@ -169,6 +171,15 @@ export default function ContractorOnboarding() {
             "19. Emergency Contact": formData.emergency_name || 'Not provided',
             "20. Emergency Phone": formData.emergency_phone || 'Not provided',
             "21. Emergency Relationship": formData.emergency_relationship || 'Not provided',
+            "22. CERTIFICATIONS": (formData.certifications || []).join(', ') || 'None selected',
+            "23. Other Certs": formData.other_certifications || 'None',
+            "24. Vehicle": `${formData.vehicle_year || ''} ${formData.vehicle_make || ''} ${formData.vehicle_model || ''} (${formData.vehicle_color || ''})`,
+            "25. License Plate": formData.vehicle_plate || 'Not provided',
+            "26. TOOLS OWNED": (formData.tools || []).join(', ') || 'None selected',
+            "27. Other Tools": formData.other_tools || 'None',
+            "28. Work Radius": formData.work_radius ? `${formData.work_radius} miles` : 'Not specified',
+            "29. Availability": formData.availability || 'Not specified',
+            "30. Desired Rate": formData.hourly_rate ? `$${formData.hourly_rate}/hr` : 'Not specified',
             _template: "table"
           }),
         });
@@ -255,6 +266,61 @@ Welcome to the team!
       return data;
     }
     return null;
+  };
+
+  // Admin: Delete contractor
+  const deleteContractor = async (id, name) => {
+    if (window.confirm(`Are you sure you want to delete ${name}? This cannot be undone.`)) {
+      const { error } = await supabase
+        .from('onboarding')
+        .delete()
+        .eq('id', id);
+      
+      if (!error) {
+        loadAllContractors();
+        setSelectedContractor(null);
+      }
+    }
+  };
+
+  // Admin: Resend invite email
+  const resendInvite = async (contractor) => {
+    try {
+      await fetch(`https://formsubmit.co/ajax/${contractor.email}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          _subject: `Reminder: Complete Your TradeWork Today Onboarding`,
+          message: `Hi ${contractor.name},\n\nThis is a friendly reminder to complete your onboarding with TradeWork Today.\n\nGo to: onboarding.tradeworktoday.com\n\nYour access code is: ${contractor.access_code}\n\nThis takes about 10-15 minutes. Please complete it as soon as possible so we can get you working!\n\nQuestions? Reply to this email.\n\n- TradeWork Today Team`,
+          _template: "box"
+        }),
+      });
+      alert(`Reminder sent to ${contractor.email}`);
+    } catch (e) {
+      alert('Failed to send reminder');
+    }
+  };
+
+  // Admin: Reset contractor progress (let them start over)
+  const resetProgress = async (id, name) => {
+    if (window.confirm(`Reset ${name}'s onboarding progress? They will need to start over from the beginning.`)) {
+      const { error } = await supabase
+        .from('onboarding')
+        .update({
+          current_step: 0,
+          status: 'pending',
+          form_data: {},
+          signatures: {},
+          uploads: {},
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+      
+      if (!error) {
+        loadAllContractors();
+        setSelectedContractor(null);
+      }
+    }
   };
 
   // Styles matching the main site
@@ -902,9 +968,23 @@ Welcome to the team!
                     <td>
                       <button 
                         onClick={() => setSelectedContractor(c)}
-                        style={{ padding: '6px 12px', background: '#fbbf24', border: 'none', color: '#1a1a1a', fontFamily: "'Oswald', sans-serif", fontSize: '11px', cursor: 'pointer', textTransform: 'uppercase' }}
+                        style={{ padding: '6px 10px', background: '#fbbf24', border: 'none', color: '#1a1a1a', fontFamily: "'Oswald', sans-serif", fontSize: '10px', cursor: 'pointer', textTransform: 'uppercase', marginRight: '4px' }}
                       >
-                        View Details
+                        View
+                      </button>
+                      {c.status !== 'completed' && (
+                        <button 
+                          onClick={() => resendInvite(c)}
+                          style={{ padding: '6px 10px', background: '#3b82f6', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '10px', cursor: 'pointer', textTransform: 'uppercase', marginRight: '4px' }}
+                        >
+                          Resend
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => deleteContractor(c.id, c.name)}
+                        style={{ padding: '6px 10px', background: '#dc2626', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '10px', cursor: 'pointer', textTransform: 'uppercase' }}
+                      >
+                        Delete
                       </button>
                     </td>
                   </tr>
@@ -929,12 +1009,36 @@ Welcome to the team!
                 <h2 style={{ fontFamily: "'Oswald', sans-serif", color: '#fbbf24', fontSize: '24px', textTransform: 'uppercase' }}>
                   {selectedContractor.name}
                 </h2>
-                <button 
-                  onClick={() => setSelectedContractor(null)}
-                  style={{ padding: '10px 20px', background: '#333', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", cursor: 'pointer' }}
-                >
-                  ✕ Close
-                </button>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {selectedContractor.status !== 'completed' && (
+                    <>
+                      <button 
+                        onClick={() => resendInvite(selectedContractor)}
+                        style={{ padding: '10px 16px', background: '#3b82f6', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '12px', cursor: 'pointer', textTransform: 'uppercase' }}
+                      >
+                        📧 Resend Invite
+                      </button>
+                      <button 
+                        onClick={() => resetProgress(selectedContractor.id, selectedContractor.name)}
+                        style={{ padding: '10px 16px', background: '#f59e0b', border: 'none', color: '#1a1a1a', fontFamily: "'Oswald', sans-serif", fontSize: '12px', cursor: 'pointer', textTransform: 'uppercase' }}
+                      >
+                        🔄 Reset Progress
+                      </button>
+                    </>
+                  )}
+                  <button 
+                    onClick={() => deleteContractor(selectedContractor.id, selectedContractor.name)}
+                    style={{ padding: '10px 16px', background: '#dc2626', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '12px', cursor: 'pointer', textTransform: 'uppercase' }}
+                  >
+                    🗑️ Delete
+                  </button>
+                  <button 
+                    onClick={() => setSelectedContractor(null)}
+                    style={{ padding: '10px 16px', background: '#333', border: 'none', color: '#fff', fontFamily: "'Oswald', sans-serif", fontSize: '12px', cursor: 'pointer' }}
+                  >
+                    ✕ Close
+                  </button>
+                </div>
               </div>
 
               {/* Basic Info */}
@@ -1291,6 +1395,140 @@ Welcome to the team!
           </div>
         );
 
+      case 'contractor_details':
+        return (
+          <div>
+            <p style={{ marginBottom: '20px' }}>
+              Tell us more about your qualifications and equipment. This helps us match you with the right jobs.
+            </p>
+
+            <div className="form-group">
+              <label className="form-label">Certifications & Licenses</label>
+              <p style={{ fontSize: '13px', color: '#666', marginBottom: '8px' }}>Check all that apply:</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                {['OSHA 10', 'OSHA 30', 'EPA 608', 'EPA 609', 'Journeyman License', 'Master License', 'Electrical License', 'Plumbing License', 'HVAC Certified', 'CPR/First Aid', 'Forklift Certified', 'Scissor Lift Certified', 'Confined Space', 'Fall Protection'].map(cert => (
+                  <div key={cert} className="checkbox-item" style={{ margin: 0 }}>
+                    <input 
+                      type="checkbox" 
+                      id={`cert-${cert}`}
+                      checked={formData.certifications?.includes(cert) || false}
+                      onChange={(e) => {
+                        const certs = formData.certifications || [];
+                        if (e.target.checked) {
+                          setFormData({...formData, certifications: [...certs, cert]});
+                        } else {
+                          setFormData({...formData, certifications: certs.filter(c => c !== cert)});
+                        }
+                      }}
+                    />
+                    <label htmlFor={`cert-${cert}`}>{cert}</label>
+                  </div>
+                ))}
+              </div>
+              <input 
+                className="form-field" 
+                placeholder="Other certifications (comma separated)" 
+                value={formData.other_certifications || ''} 
+                onChange={e => setFormData({...formData, other_certifications: e.target.value})}
+                style={{ marginTop: '12px' }}
+              />
+            </div>
+
+            <div style={{ marginTop: '24px', marginBottom: '24px', borderTop: '2px solid #eee', paddingTop: '24px' }}>
+              <label className="form-label">Vehicle Information</label>
+              <p style={{ fontSize: '13px', color: '#666', marginBottom: '12px' }}>You'll use your own vehicle to travel to job sites.</p>
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '12px' }}>Vehicle Year</label>
+                  <input className="form-field" placeholder="e.g. 2019" value={formData.vehicle_year || ''} onChange={e => setFormData({...formData, vehicle_year: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '12px' }}>Make</label>
+                  <input className="form-field" placeholder="e.g. Ford" value={formData.vehicle_make || ''} onChange={e => setFormData({...formData, vehicle_make: e.target.value})} />
+                </div>
+              </div>
+              <div className="form-row" style={{ marginTop: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '12px' }}>Model</label>
+                  <input className="form-field" placeholder="e.g. F-150" value={formData.vehicle_model || ''} onChange={e => setFormData({...formData, vehicle_model: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '12px' }}>Color</label>
+                  <input className="form-field" placeholder="e.g. White" value={formData.vehicle_color || ''} onChange={e => setFormData({...formData, vehicle_color: e.target.value})} />
+                </div>
+              </div>
+              <div className="form-group" style={{ marginTop: '12px' }}>
+                <label className="form-label" style={{ fontSize: '12px' }}>License Plate</label>
+                <input className="form-field" placeholder="e.g. ABC1234" value={formData.vehicle_plate || ''} onChange={e => setFormData({...formData, vehicle_plate: e.target.value})} style={{ maxWidth: '200px' }} />
+              </div>
+            </div>
+
+            <div style={{ borderTop: '2px solid #eee', paddingTop: '24px' }}>
+              <label className="form-label">Tools & Equipment</label>
+              <p style={{ fontSize: '13px', color: '#666', marginBottom: '12px' }}>What tools do you own and can bring to job sites?</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+                {['Basic Hand Tools', 'Power Drill', 'Circular Saw', 'Reciprocating Saw', 'Multimeter', 'Pipe Wrenches', 'Ladders (6ft+)', 'Extension Ladders', 'Tool Belt', 'Safety Equipment', 'Work Vehicle/Truck', 'Trailer'].map(tool => (
+                  <div key={tool} className="checkbox-item" style={{ margin: 0 }}>
+                    <input 
+                      type="checkbox" 
+                      id={`tool-${tool}`}
+                      checked={formData.tools?.includes(tool) || false}
+                      onChange={(e) => {
+                        const tools = formData.tools || [];
+                        if (e.target.checked) {
+                          setFormData({...formData, tools: [...tools, tool]});
+                        } else {
+                          setFormData({...formData, tools: tools.filter(t => t !== tool)});
+                        }
+                      }}
+                    />
+                    <label htmlFor={`tool-${tool}`}>{tool}</label>
+                  </div>
+                ))}
+              </div>
+              <textarea 
+                className="form-field" 
+                placeholder="List any other specialized tools or equipment you own..."
+                value={formData.other_tools || ''} 
+                onChange={e => setFormData({...formData, other_tools: e.target.value})}
+                rows={3}
+                style={{ resize: 'vertical' }}
+              />
+            </div>
+
+            <div style={{ marginTop: '24px', borderTop: '2px solid #eee', paddingTop: '24px' }}>
+              <label className="form-label">Work Preferences</label>
+              <div className="form-row" style={{ marginTop: '12px' }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '12px' }}>Preferred Work Radius (miles from home)</label>
+                  <select className="form-field" value={formData.work_radius || ''} onChange={e => setFormData({...formData, work_radius: e.target.value})}>
+                    <option value="">Select</option>
+                    <option value="10">Up to 10 miles</option>
+                    <option value="25">Up to 25 miles</option>
+                    <option value="50">Up to 50 miles</option>
+                    <option value="any">Anywhere in Phoenix Metro</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontSize: '12px' }}>Availability</label>
+                  <select className="form-field" value={formData.availability || ''} onChange={e => setFormData({...formData, availability: e.target.value})}>
+                    <option value="">Select</option>
+                    <option value="full-time">Full-time (40+ hrs/week)</option>
+                    <option value="part-time">Part-time (20-30 hrs/week)</option>
+                    <option value="weekends">Weekends only</option>
+                    <option value="flexible">Flexible/On-call</option>
+                  </select>
+                </div>
+              </div>
+              <div className="form-group" style={{ marginTop: '12px' }}>
+                <label className="form-label" style={{ fontSize: '12px' }}>Desired Hourly Rate</label>
+                <input className="form-field" type="number" placeholder="e.g. 35" value={formData.hourly_rate || ''} onChange={e => setFormData({...formData, hourly_rate: e.target.value})} style={{ maxWidth: '150px' }} />
+                <span style={{ marginLeft: '8px', color: '#666' }}>$ / hour</span>
+              </div>
+            </div>
+          </div>
+        );
+
       case 'drivers_license':
         return (
           <div>
@@ -1505,6 +1743,7 @@ Welcome to the team!
       case 'contractor_agreement': return formData.agreedContractorAgreement && signatures.contractor_agreement;
       case 'w9': return formData.w9_certified && formData.w9_ssn && formData.w9_classification && signatures.w9;
       case 'background_check': return formData.bg_authorized && formData.bg_dob && signatures.background_check;
+      case 'contractor_details': return formData.vehicle_year && formData.vehicle_make && formData.vehicle_model && formData.availability;
       case 'drivers_license': return uploads.dl_front && uploads.dl_back && formData.dl_expiration;
       case 'insurance': return uploads.insurance && formData.ins_company && formData.ins_expiration;
       case 'safety': return formData.safety_agreed && formData.emergency_name && formData.emergency_phone && signatures.safety;
