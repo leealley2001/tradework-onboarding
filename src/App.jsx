@@ -499,6 +499,10 @@ const generateSafetyAgreementPDF = (contractor, formData, signature) => {
 };
 
 const downloadAllPDFs = (contractor, formData, signatures) => {
+  if (signatures.handbook) {
+    const doc = generateSignedHandbookPDF(contractor, signatures.handbook);
+    doc.save(`${contractor.name.replace(/\s+/g, '_')}_Contractor_Handbook.pdf`);
+  }
   if (signatures.contractor_agreement) {
     const doc = generateContractorAgreementPDF(contractor, formData, signatures.contractor_agreement);
     doc.save(`${contractor.name.replace(/\s+/g, '_')}_Contractor_Agreement.pdf`);
@@ -958,9 +962,61 @@ const generateContractorHandbookPDF = () => {
   return doc;
 };
 
+// Generate Signed Contractor Handbook PDF (with contractor signature)
+const generateSignedHandbookPDF = (contractor, signature) => {
+  // Generate the base handbook
+  const doc = generateContractorHandbookPDF();
+  
+  // Go to the last page and add the signature
+  const pageCount = doc.getNumberOfPages();
+  doc.setPage(pageCount);
+  
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 20;
+  
+  // Add signature section
+  let y = 165;
+  
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(0, 0, 0);
+  doc.text('CONTRACTOR ACKNOWLEDGMENT SIGNATURE', margin, y);
+  y += 12;
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Contractor Name: ${contractor.name}`, margin, y);
+  y += 8;
+  doc.text(`Email: ${contractor.email}`, margin, y);
+  y += 8;
+  doc.text(`Trade: ${contractor.trade}`, margin, y);
+  y += 12;
+  
+  doc.text('Electronic Signature:', margin, y);
+  y += 8;
+  
+  // Signature box
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.5);
+  doc.rect(margin, y - 2, 100, 15);
+  doc.setFont('times', 'italic');
+  doc.setFontSize(16);
+  doc.text(signature.signature, margin + 5, y + 8);
+  
+  y += 20;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`Signed electronically on: ${new Date(signature.signed_at).toLocaleString()}`, margin, y);
+  y += 5;
+  doc.text('This electronic signature has the same legal effect as a handwritten signature.', margin, y);
+  
+  return doc;
+};
+
 // Onboarding steps configuration
 const ONBOARDING_STEPS = [
   { id: 'welcome', title: 'Welcome', icon: '👋' },
+  { id: 'handbook', title: 'Contractor Handbook', icon: '📖' },
   { id: 'contractor_agreement', title: 'Contractor Agreement', icon: '📋' },
   { id: 'w9', title: 'W-9 Tax Form', icon: '📄' },
   { id: 'background_check', title: 'Background Check', icon: '🔍' },
@@ -1154,6 +1210,16 @@ ${signatureList || 'None'}
 
 DOCUMENTS UPLOADED:
 ${uploadList || 'None'}
+
+YOUR SIGNED DOCUMENTS:
+We have your signed copies of:
+• Contractor Handbook (acknowledged ${signatures.handbook ? new Date(signatures.handbook.signed_at).toLocaleDateString() : 'N/A'})
+• Independent Contractor Agreement
+• W-9 Tax Information
+• Background Check Authorization
+• Safety Agreement
+
+To request PDF copies of your signed documents, please reply to this email or contact us at ${COMPANY_EMAIL}.
 
 WHAT'S NEXT:
 • We will review your information
@@ -2148,7 +2214,9 @@ Welcome to the team!
                         <button
                           onClick={() => {
                             let doc;
-                            if (key === 'contractor_agreement') {
+                            if (key === 'handbook') {
+                              doc = generateSignedHandbookPDF(selectedContractor, sig);
+                            } else if (key === 'contractor_agreement') {
                               doc = generateContractorAgreementPDF(selectedContractor, selectedContractor.form_data || {}, sig);
                             } else if (key === 'w9') {
                               doc = generateW9PDF(selectedContractor, selectedContractor.form_data || {}, sig);
@@ -2259,6 +2327,100 @@ Welcome to the team!
             <p style={{ color: '#666' }}>
               Your progress is saved automatically. You can close this page and return later using the same access code.
             </p>
+          </div>
+        );
+
+      case 'handbook':
+        return (
+          <div>
+            <p style={{ marginBottom: '20px' }}>
+              Please read the Contractor Handbook below. This handbook contains important policies, procedures, and safety requirements that apply to all contractors.
+            </p>
+            
+            <div className="legal-text" style={{ maxHeight: '400px', marginBottom: '20px' }}>
+              <h3 style={{ color: '#d62828', marginBottom: '16px', textAlign: 'center' }}>TRADE WORK TODAY - CONTRACTOR HANDBOOK</h3>
+              
+              <h4 style={{ marginTop: '20px', marginBottom: '8px', color: '#1a1a1a' }}>1. WELCOME & COMPANY OVERVIEW</h4>
+              <p style={{ marginBottom: '12px' }}>Welcome to TradeWork Today! We are a professional handyman and trade services company serving the Phoenix metropolitan area. Our mission is to provide reliable, high-quality services to homeowners and businesses while creating opportunities for skilled tradespeople.</p>
+              
+              <h4 style={{ marginTop: '20px', marginBottom: '8px', color: '#1a1a1a' }}>2. INDEPENDENT CONTRACTOR RELATIONSHIP</h4>
+              <p style={{ marginBottom: '8px' }}>As an independent contractor, you are not an employee of TradeWork Today. You maintain control over how you complete your work, set your own schedule (within job requirements), and are responsible for your own taxes, insurance, and business expenses.</p>
+              <p style={{ marginBottom: '12px' }}>Key points: You have the right to accept or decline any job assignment. You provide your own tools, equipment, and vehicle. You are responsible for self-employment taxes. You maintain your own liability insurance.</p>
+              
+              <h4 style={{ marginTop: '20px', marginBottom: '8px', color: '#1a1a1a' }}>3. PROFESSIONAL CONDUCT STANDARDS</h4>
+              <p style={{ marginBottom: '8px' }}><strong>Appearance:</strong> Wear clean, appropriate work clothing. Display identification when provided. Maintain good personal hygiene.</p>
+              <p style={{ marginBottom: '8px' }}><strong>Behavior:</strong> Treat all customers with respect and courtesy. No smoking on customer property. No alcohol or drugs before or during work. No profanity or inappropriate language. Clean up work area before leaving.</p>
+              <p style={{ marginBottom: '12px' }}><strong>Prohibited:</strong> Theft or dishonesty. Harassment or discrimination. Unauthorized use of customer property. Soliciting customers directly.</p>
+              
+              <h4 style={{ marginTop: '20px', marginBottom: '8px', color: '#1a1a1a' }}>4. SAFETY REQUIREMENTS</h4>
+              <p style={{ marginBottom: '8px' }}><strong>PPE Requirements:</strong> Safety glasses for cutting, drilling, or overhead work. Work gloves when handling materials. Steel-toed boots on construction sites. Dust masks for dusty conditions. Hearing protection when using loud equipment.</p>
+              <p style={{ marginBottom: '8px' }}><strong>Ladder Safety:</strong> Inspect before each use. Maintain 3 points of contact. Never stand on top two rungs. Place on stable, level surface.</p>
+              <p style={{ marginBottom: '8px' }}><strong>Electrical Safety:</strong> Always turn off power before electrical work. Use a circuit tester to verify power is off. Never work on live circuits unless licensed and necessary.</p>
+              <p style={{ marginBottom: '12px' }}><strong>Incident Reporting:</strong> Report ALL incidents immediately including any injury, property damage, near-misses, and safety hazards.</p>
+              
+              <h4 style={{ marginTop: '20px', marginBottom: '8px', color: '#1a1a1a' }}>5. COMMUNICATION POLICY</h4>
+              <p style={{ marginBottom: '8px' }}><strong>Response Times:</strong> Respond to dispatch messages within 15 minutes during work hours. Confirm job acceptance/decline within 1 hour. Notify dispatch immediately of any delays.</p>
+              <p style={{ marginBottom: '12px' }}><strong>Customer Communication:</strong> Introduce yourself professionally. Explain the work before starting. Keep customer informed of progress. Review completed work with customer.</p>
+              
+              <h4 style={{ marginTop: '20px', marginBottom: '8px', color: '#1a1a1a' }}>6. ATTENDANCE & AVAILABILITY</h4>
+              <p style={{ marginBottom: '8px' }}>Only accept jobs you can complete on time. Arrive at scheduled time or within 15-minute window. If running late, notify dispatch AND customer immediately.</p>
+              <p style={{ marginBottom: '12px' }}>Cancellations must be made at least 24 hours in advance when possible. Repeated no-shows or last-minute cancellations may result in termination.</p>
+              
+              <h4 style={{ marginTop: '20px', marginBottom: '8px', color: '#1a1a1a' }}>7. EQUIPMENT & TOOLS</h4>
+              <p style={{ marginBottom: '12px' }}>Contractors provide their own tools and equipment. Required: Basic hand tools, power tools in good condition, safety equipment, reliable transportation, smartphone for communication.</p>
+              
+              <h4 style={{ marginTop: '20px', marginBottom: '8px', color: '#1a1a1a' }}>8. VEHICLE & MILEAGE POLICY</h4>
+              <p style={{ marginBottom: '12px' }}>Requirements: Valid driver's license, current registration, auto insurance meeting Arizona minimums, vehicle in safe working condition. Obey all traffic laws. No phone use while driving. Park legally at job sites.</p>
+              
+              <h4 style={{ marginTop: '20px', marginBottom: '8px', color: '#1a1a1a' }}>9. QUALITY STANDARDS</h4>
+              <p style={{ marginBottom: '12px' }}>Complete all work to professional standards. Follow manufacturer instructions and building codes. Take pride in your work. If unsure about something, ask before proceeding. Never cut corners on safety or quality.</p>
+              
+              <h4 style={{ marginTop: '20px', marginBottom: '8px', color: '#1a1a1a' }}>10. CUSTOMER SERVICE</h4>
+              <p style={{ marginBottom: '12px' }}>Listen to customer needs. Explain work in non-technical terms. Be honest about capabilities. Respect customer property. Leave work area cleaner than you found it.</p>
+              
+              <h4 style={{ marginTop: '20px', marginBottom: '8px', color: '#1a1a1a' }}>11. PAYMENT & INVOICING</h4>
+              <p style={{ marginBottom: '12px' }}>Payments processed weekly (every Friday). Work must be marked complete. Customer must confirm completion. Do not collect payment directly from customers - all payments go through TradeWork Today.</p>
+              
+              <h4 style={{ marginTop: '20px', marginBottom: '8px', color: '#1a1a1a' }}>12. TERMINATION</h4>
+              <p style={{ marginBottom: '8px' }}><strong>Immediate termination grounds:</strong> Safety violations, theft or dishonesty, working under the influence, harassment, repeated no-shows, misrepresentation of qualifications, direct solicitation of customers.</p>
+              <p style={{ marginBottom: '12px' }}><strong>Voluntary separation:</strong> Provide at least 7 days notice when possible. Complete accepted jobs or arrange handoff. Return any company property.</p>
+            </div>
+            
+            <div style={{ background: '#e0f2fe', border: '2px solid #0284c7', padding: '16px', marginBottom: '20px' }}>
+              <p style={{ fontSize: '14px', marginBottom: '0' }}>
+                <strong>📥 Note:</strong> A signed PDF copy of this handbook will be emailed to you upon completion of onboarding for your records.
+              </p>
+            </div>
+
+            <div className="checkbox-item">
+              <input 
+                type="checkbox" 
+                id="handbook-read"
+                checked={formData.handbookRead || false}
+                onChange={(e) => setFormData({...formData, handbookRead: e.target.checked})}
+              />
+              <label htmlFor="handbook-read">
+                I have read and understand the entire Contractor Handbook. I agree to comply with all policies and procedures outlined above.
+              </label>
+            </div>
+
+            {formData.handbookRead && (
+              <div className="signature-box">
+                {signatures.handbook ? (
+                  <div className="signed-badge">✓ Signed: {signatures.handbook.signature}</div>
+                ) : (
+                  <>
+                    <input 
+                      type="text" 
+                      className="signature-input" 
+                      placeholder="Type your full legal name"
+                      onBlur={(e) => e.target.value && handleSignature('handbook', e.target.value)}
+                    />
+                    <div className="signature-line">Type your full legal name to acknowledge the handbook</div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         );
 
@@ -2830,6 +2992,7 @@ Welcome to the team!
   const canProceed = () => {
     switch (step.id) {
       case 'welcome': return true;
+      case 'handbook': return formData.handbookRead && signatures.handbook;
       case 'contractor_agreement': return formData.agreedContractorAgreement && signatures.contractor_agreement;
       case 'w9': return formData.w9_certified && formData.w9_ssn && formData.w9_classification && signatures.w9;
       case 'background_check': return formData.bg_authorized && formData.bg_dob && signatures.background_check;
